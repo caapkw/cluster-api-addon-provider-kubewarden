@@ -1,0 +1,23 @@
+# permissions for end users to view kubewardenaddons.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: cluster-api-addon-provider-kubewarden
+    app.kubernetes.io/managed-by: kustomize
+  name: kubewardenaddon-viewer-role
+rules:
+- apiGroups:
+  - addon.cluster.x-k8s.io
+  resources:
+  - kubewardenaddons
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - addon.cluster.x-k8s.io
+  resources:
+  - kubewardenaddons/status
+  verbs:
+  - get
