@@ -7,4 +7,14 @@ layout:
 - go.kubebuilder.io/v4
 projectName: cluster-api-addon-provider-kubewarden
 repo: github.com/salasberryfin/cluster-api-provider-addon-kubewarden
+resources:
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: cluster.x-k8s.io
+  group: addon
+  kind: KubewardenAddon
+  path: github.com/salasberryfin/cluster-api-provider-addon-kubewarden/api/v1alpha1
+  version: v1alpha1
 version: "3"
