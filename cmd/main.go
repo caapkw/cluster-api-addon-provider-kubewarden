@@ -149,6 +149,12 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "KubewardenAddon")
 		os.Exit(1)
 	}
+
+	if err = (&addonv1alpha1.KubewardenAddon{}).SetupWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "KubewardenAddon")
+		os.Exit(1)
+	}
+
 	// +kubebuilder:scaffold:builder
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
