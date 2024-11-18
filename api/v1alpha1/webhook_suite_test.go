@@ -82,7 +82,7 @@ var _ = BeforeSuite(func() {
 	err = admissionv1beta1.AddToScheme(scheme)
 	Expect(err).NotTo(HaveOccurred())
 
-	//+kubebuilder:scaffold:scheme
+	// +kubebuilder:scaffold:scheme
 	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme})
 	Expect(err).NotTo(HaveOccurred())
 	Expect(k8sClient).NotTo(BeNil())
@@ -106,7 +106,7 @@ var _ = BeforeSuite(func() {
 	err = (&KubewardenAddon{}).SetupWebhookWithManager(mgr)
 	Expect(err).NotTo(HaveOccurred())
 
-	//+kubebuilder:scaffold:webhook
+	// +kubebuilder:scaffold:webhook
 	go func() {
 		defer GinkgoRecover()
 		err = mgr.Start(ctx)
