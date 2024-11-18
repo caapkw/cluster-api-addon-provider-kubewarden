@@ -31,6 +31,7 @@ jobs:
         registry: ${{ env.REGISTRY }}
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
+        logout: false
     - name: Build and push docker images
       run: |
         make docker-build-and-push TAG=${{ env.TAG }} ORG=${{ env.ORG }}
