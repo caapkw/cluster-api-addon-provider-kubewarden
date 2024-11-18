@@ -7,7 +7,7 @@ metadata:
   name: kubewardenaddon-sample
 spec:
   version: v0.1.0
-  imageRepository: ghcr.io/kubewarden:latest
+  imageRepository: ghcr.io/kubewarden/kubewarden-controller:v1.18.0
   policyServerConfig: 
     replicas: 1
     resources:
