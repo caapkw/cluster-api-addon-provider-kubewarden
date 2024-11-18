@@ -7,5 +7,5 @@ spec:
   template:
     spec:
       containers:
-      - image: gcr.io/cluster-api-addon-provider-kubewarden-controller:main
+      - image: ghcr.io/caapkw/cluster-api-addon-provider-kubewarden:v0.0.1
         name: manager
