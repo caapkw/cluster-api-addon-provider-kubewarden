@@ -16,6 +16,10 @@ issues:
       linters:
         - dupl
         - lll
+    - path: "test/*"
+      linters:
+        - unconvert
+        - govet
 linters:
   disable-all: true
   enable:

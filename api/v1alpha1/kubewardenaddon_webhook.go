@@ -33,8 +33,7 @@ func (r *KubewardenAddon) SetupWebhookWithManager(mgr ctrl.Manager) error {
 		Complete()
 }
 
-//+kubebuilder:webhook:path=/mutate-addons-cluster-x-k8s-io-v1alpha1-kubewardenaddon,mutating=true,failurePolicy=fail,sideEffects=None,groups=addons.cluster.x-k8s.io,resources=kubewardenaddons,verbs=create;update,versions=v1alpha1,name=kubewardenaddon.kb.io,admissionReviewVersions=v1
-
+// +kubebuilder:webhook:path=/mutate-addons-cluster-x-k8s-io-v1alpha1-kubewardenaddon,mutating=true,failurePolicy=fail,sideEffects=None,groups=addons.cluster.x-k8s.io,resources=kubewardenaddons,verbs=create;update,versions=v1alpha1,name=kubewardenaddon.kb.io,admissionReviewVersions=v1
 var _ webhook.Defaulter = &KubewardenAddon{}
 
 // Default implements webhook.Defaulter so a webhook will be registered for the type.
