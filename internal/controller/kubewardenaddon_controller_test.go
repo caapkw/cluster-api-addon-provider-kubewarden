@@ -18,11 +18,17 @@ package controller
 
 import (
 	"context"
+	"fmt"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
+	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
+	"sigs.k8s.io/cluster-api/controllers/remote"
+	"sigs.k8s.io/cluster-api/util/secret"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -31,6 +37,10 @@ import (
 )
 
 var _ = Describe("KubewardenAddon Controller", func() {
+	var (
+		capiCluster          *clusterv1.Cluster
+		capiKubeconfigSecret *corev1.Secret
+	)
 	Context("When reconciling a resource", func() {
 		const resourceName = "test-resource"
 
@@ -38,11 +48,28 @@ var _ = Describe("KubewardenAddon Controller", func() {
 
 		typeNamespacedName := types.NamespacedName{
 			Name:      resourceName,
-			Namespace: "default", // TODO(user):Modify as needed
+			Namespace: "default",
 		}
 		kubewardenaddon := &addonv1alpha1.KubewardenAddon{}
 
 		BeforeEach(func() {
+			capiCluster = &clusterv1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-cluster",
+					Namespace: "default",
+				},
+			}
+
+			capiKubeconfigSecret = &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      fmt.Sprintf("%s-kubeconfig", capiCluster.Name),
+					Namespace: "default",
+				},
+				Data: map[string][]byte{
+					secret.KubeconfigDataName: kubeConfigBytes,
+				},
+			}
+
 			By("creating the custom resource for the Kind KubewardenAddon")
 			err := k8sClient.Get(ctx, typeNamespacedName, kubewardenaddon)
 			if err != nil && errors.IsNotFound(err) {
@@ -51,7 +78,6 @@ var _ = Describe("KubewardenAddon Controller", func() {
 						Name:      resourceName,
 						Namespace: "default",
 					},
-					// TODO(user): Specify other spec details if needed.
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}
@@ -59,23 +85,36 @@ var _ = Describe("KubewardenAddon Controller", func() {
 
 		AfterEach(func() {
 			// TODO(user): Cleanup logic after each test, like removing the resource instance.
-			resource := &addonv1alpha1.KubewardenAddon{}
-			err := k8sClient.Get(ctx, typeNamespacedName, resource)
+		})
+
+		It("should successfully reconcile the resource", func() {
+			By("Create CAPI Cluster & get remote client")
+			cluster := capiCluster.DeepCopy()
+			Expect(k8sClient.Create(ctx, cluster)).To(Succeed())
+			cluster.Status.ControlPlaneReady = true
+			Expect(k8sClient.Status().Update(ctx, cluster)).To(Succeed())
+
+			Expect(k8sClient.Create(ctx, capiKubeconfigSecret)).To(Succeed())
+
+			workloadClient, err := remote.NewClusterClient(ctx, cluster.Name, k8sClient, client.ObjectKeyFromObject(cluster))
 			Expect(err).NotTo(HaveOccurred())
 
-			By("Cleanup the specific resource instance KubewardenAddon")
-			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
-		})
-		It("should successfully reconcile the resource", func() {
-			By("Reconciling the created resource")
 			controllerReconciler := &KubewardenAddonReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
+				Client:             k8sClient,
+				Scheme:             k8sClient.Scheme(),
+				RemoteClientGetter: remote.NewClusterClient,
 			}
 
-			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+			By("Reconciling the created resource")
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: typeNamespacedName,
 			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By(fmt.Sprintf("Checking namespace %s exists", kubewardenNamespace))
+			// kubewarden namespace should exist
+			kubewardenNs := &corev1.Namespace{}
+			err = workloadClient.Get(ctx, client.ObjectKey{Name: kubewardenNamespace}, kubewardenNs)
 			Expect(err).NotTo(HaveOccurred())
 			// TODO(user): Add more specific assertions depending on your controller's reconciliation logic.
 			// Example: If you expect a certain status condition after reconciliation, verify it here.
