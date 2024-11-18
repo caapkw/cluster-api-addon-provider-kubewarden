@@ -25,7 +25,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/salasberryfin/cluster-api-provider-addon-kubewarden/test/utils"
+	"github.com/caapkw/cluster-api-provider-addon-kubewarden/test/utils"
 )
 
 var (

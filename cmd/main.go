@@ -35,8 +35,8 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	addonv1alpha1 "github.com/salasberryfin/cluster-api-provider-addon-kubewarden/api/v1alpha1"
-	"github.com/salasberryfin/cluster-api-provider-addon-kubewarden/internal/controller"
+	addonv1alpha1 "github.com/caapkw/cluster-api-provider-addon-kubewarden/api/v1alpha1"
+	"github.com/caapkw/cluster-api-provider-addon-kubewarden/internal/controller"
 	// +kubebuilder:scaffold:imports
 )
 

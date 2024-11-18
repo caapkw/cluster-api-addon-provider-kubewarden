@@ -24,7 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	addonv1alpha1 "github.com/salasberryfin/cluster-api-provider-addon-kubewarden/api/v1alpha1"
+	addonv1alpha1 "github.com/caapkw/cluster-api-provider-addon-kubewarden/api/v1alpha1"
 )
 
 // KubewardenAddonReconciler reconciles a KubewardenAddon object

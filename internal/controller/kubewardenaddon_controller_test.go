@@ -27,7 +27,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	addonv1alpha1 "github.com/salasberryfin/cluster-api-provider-addon-kubewarden/api/v1alpha1"
+	addonv1alpha1 "github.com/caapkw/cluster-api-provider-addon-kubewarden/api/v1alpha1"
 )
 
 var _ = Describe("KubewardenAddon Controller", func() {
