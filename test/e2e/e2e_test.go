@@ -34,13 +34,13 @@ import (
 const namespace = "cluster-api-addon-provider-kubewarden-system"
 
 // serviceAccountName created for the project
-const serviceAccountName = "cluster-api-addon-provider-kubewarden-controller-manager"
+const serviceAccountName = "capi-provider-kubewarden-ctrl-mgr"
 
 // metricsServiceName is the name of the metrics service of the project
-const metricsServiceName = "cluster-api-addon-provider-kubewarden-controller-manager-metrics-service"
+const metricsServiceName = "capi-provider-kubewarden-ctrl-mgr-metrics-service"
 
 // metricsRoleBindingName is the name of the RBAC that will be created to allow get the metrics data
-const metricsRoleBindingName = "cluster-api-addon-provider-kubewarden-metrics-binding"
+const metricsRoleBindingName = "capi-provider-kubewarden-metrics-binding"
 
 var _ = Describe("Manager", Ordered, func() {
 	var controllerPodName string
@@ -166,7 +166,7 @@ var _ = Describe("Manager", Ordered, func() {
 		It("should ensure the metrics endpoint is serving metrics", func() {
 			By("creating a ClusterRoleBinding for the service account to allow access to metrics")
 			cmd := exec.Command("kubectl", "create", "clusterrolebinding", metricsRoleBindingName,
-				"--clusterrole=cluster-api-addon-provider-kubewarden-metrics-reader",
+				"--clusterrole=capi-provider-kubewarden-metrics-reader",
 				fmt.Sprintf("--serviceaccount=%s:%s", namespace, serviceAccountName),
 			)
 			_, err := utils.Run(cmd)

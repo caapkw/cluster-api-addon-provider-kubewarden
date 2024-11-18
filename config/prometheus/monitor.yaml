@@ -4,9 +4,9 @@ kind: ServiceMonitor
 metadata:
   labels:
     control-plane: controller-manager
-    app.kubernetes.io/name: cluster-api-addon-provider-kubewarden
+    app.kubernetes.io/name: capi-provider-kubewarden
     app.kubernetes.io/managed-by: kustomize
-  name: controller-manager-metrics-monitor
+  name: ctrl-mgr-metrics-monitor
   namespace: system
 spec:
   endpoints:
