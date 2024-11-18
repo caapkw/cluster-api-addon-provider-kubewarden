@@ -42,7 +42,7 @@ func (p *KubewardenAddon) Default() {
 	kubewardenaddonlog.Info("default", "name", p.Name)
 
 	if p.Spec.ImageRepository == "" {
-		p.Spec.ImageRepository = "ghcr.io/kubewarden"
+		p.Spec.ImageRepository = "ghcr.io/kubewarden/kubewarden-controller:v1.18.0"
 	}
 
 	if p.Spec.Version == "" {

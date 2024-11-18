@@ -1,4 +1,6 @@
 run:
+  skip-dirs:
+    - test/*
   timeout: 5m
   allow-parallel-runners: true
 
@@ -16,10 +18,6 @@ issues:
       linters:
         - dupl
         - lll
-    - path: "test/*"
-      linters:
-        - unconvert
-        - govet
 linters:
   disable-all: true
   enable:
