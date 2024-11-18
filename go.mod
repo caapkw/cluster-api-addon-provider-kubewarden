@@ -1,4 +1,4 @@
-module github.com/salasberryfin/cluster-api-provider-addon-kubewarden
+module github.com/caapkw/cluster-api-provider-addon-kubewarden
 
 go 1.22.0
 
