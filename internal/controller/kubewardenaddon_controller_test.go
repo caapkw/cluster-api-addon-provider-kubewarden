@@ -139,11 +139,11 @@ var _ = Describe("KubewardenAddon Controller", func() {
 					policyCRD := &apiextensionsv1.CustomResourceDefinition{}
 					g.Expect(workloadClient.Get(ctx, client.ObjectKey{Name: crd}, policyCRD)).To(Succeed())
 				}
-				//By("Cluster should have installed annotation")
-				//g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(cluster), cluster)).To(Succeed())
-				//annotations := cluster.GetAnnotations()
-				//_, ok := annotations[KubewardenInstalledAnnotation]
-				//g.Expect(ok).To(BeTrue())
+				// By("Cluster should have installed annotation")
+				// g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(cluster), cluster)).To(Succeed())
+				// annotations := cluster.GetAnnotations()
+				// _, ok := annotations[KubewardenInstalledAnnotation]
+				// g.Expect(ok).To(BeTrue())
 			}).Should(Succeed())
 		})
 	})
