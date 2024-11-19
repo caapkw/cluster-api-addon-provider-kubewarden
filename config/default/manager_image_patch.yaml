@@ -7,5 +7,5 @@ spec:
   template:
     spec:
       containers:
-      - image: ghcr.io/caapkw/cluster-api-addon-provider-kubewarden:v0.0.1
+      - image: ghcr.io/salasberryfin/caapkw:v0.0.1-salasberryfin
         name: manager
