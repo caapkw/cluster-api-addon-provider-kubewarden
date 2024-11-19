@@ -43,7 +43,11 @@ func applyManifest(ctx context.Context, k8sClient client.Client, filePath string
 	if err != nil {
 		return fmt.Errorf("failed to open file: %w", err)
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			fmt.Printf("Error closing file: %v\n", err)
+		}
+	}()
 
 	decoder := yaml.NewYAMLOrJSONDecoder(file, 1024)
 	for {
