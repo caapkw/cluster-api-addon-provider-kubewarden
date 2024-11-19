@@ -180,9 +180,6 @@ docker-build-and-push: buildx-machine docker-pull-prerequisites ## Run docker-bu
 	DOCKER_BUILDKIT=1 BUILDX_BUILDER=$(MACHINE) docker buildx build \
 			--platform $(TARGET_PLATFORMS) \
 			--push \
-			--sbom=true \
-			--attest type=provenance,mode=max \
-			--iidfile=$(IID_FILE) \
 			--build-arg builder_image=$(GO_CONTAINER_IMAGE) \
 			--build-arg goproxy=$(GOPROXY) \
 			--build-arg package=. \
