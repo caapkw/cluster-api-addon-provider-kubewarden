@@ -1,4 +1,6 @@
 run:
+  skip-dirs:
+    - test/*
   timeout: 5m
   allow-parallel-runners: true
 

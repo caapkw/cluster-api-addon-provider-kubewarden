@@ -3,9 +3,9 @@ kind: Service
 metadata:
   labels:
     control-plane: controller-manager
-    app.kubernetes.io/name: cluster-api-addon-provider-kubewarden
+    app.kubernetes.io/name: capi-provider-kubewarden
     app.kubernetes.io/managed-by: kustomize
-  name: controller-manager-metrics-service
+  name: ctrl-mgr-metrics-service
   namespace: system
 spec:
   ports:
