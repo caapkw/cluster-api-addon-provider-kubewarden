@@ -22,8 +22,12 @@ import (
 	"os"
 	"path/filepath"
 
+	"helm.sh/helm/v3/pkg/action"
+	"helm.sh/helm/v3/pkg/chart"
+	"helm.sh/helm/v3/pkg/chart/loader"
+	"helm.sh/helm/v3/pkg/cli"
+
 	corev1 "k8s.io/api/core/v1"
-	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -48,10 +52,6 @@ type KubewardenAddonReconciler struct {
 	// RemoteClientGetter is used for accessing workload clusters
 	RemoteClientGetter remote.ClusterClientGetter
 }
-
-// TODO: deploy kubewarden to any CAPI clusters
-// TODO: deploy kubewarden to CAPI clusters defined in KubewardenAddon.Spec
-// TODO: deploy specific policies to CAPI clusters
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *KubewardenAddonReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
@@ -99,19 +99,6 @@ func (r *KubewardenAddonReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	// for now we will deploy kubewarden to all clusters
 
-	/*
-		// fetch capi clusters
-		cluster := &clusterv1.Cluster{}
-		if err := r.Client.Get(ctx, req.NamespacedName, cluster); err != nil {
-			if apierrors.IsNotFound(err) {
-				log.Info("Cluster not found")
-				return ctrl.Result{Requeue: true}, nil
-			}
-
-			return ctrl.Result{Requeue: true}, err
-		}
-	*/
-
 	if !addon.DeletionTimestamp.IsZero() {
 		// this won't be the case as there is no finalizer yet
 		return ctrl.Result{}, nil
@@ -150,6 +137,11 @@ func (r *KubewardenAddonReconciler) reconcileNormal(ctx context.Context, addon *
 			return ctrl.Result{RequeueAfter: defaultRequeueDuration}, nil
 		}
 
+		if HasAnnotation(&cluster, KubewardenInstalledAnnotation) {
+			log.Info("Kubewarden already installed on cluster, skipping")
+			return ctrl.Result{}, nil
+		}
+
 		// create a remote client to connect to the workload cluster
 		remoteClient, err := r.RemoteClientGetter(ctx, cluster.Name, r.Client, client.ObjectKeyFromObject(&cluster))
 		if err != nil {
@@ -169,14 +161,41 @@ func (r *KubewardenAddonReconciler) reconcileNormal(ctx context.Context, addon *
 			return ctrl.Result{}, fmt.Errorf("creating kubewarden CRDs: %w", err)
 		}
 
-		// - [ ] install kubewarden-controller
+		// install kubewarden-controller
 		log.Info(fmt.Sprintf("Installing Kubewarden controller to cluster %s", cluster.Name))
+		_, err = renderHelmChart(ctx, "kubewarden-controller", "", nil)
+		if err != nil {
+			return ctrl.Result{}, fmt.Errorf("rendering helm chart: %w", err)
+		}
 
-		// - [ ] install kubewarden-defaults
+		// install kubewarden-defaults
 		log.Info(fmt.Sprintf("Installing Kubewarden defaults controller to cluster %s", cluster.Name))
+		_, err = renderHelmChart(ctx, "kubewarden-defaults", "", nil)
+		if err != nil {
+			return ctrl.Result{}, fmt.Errorf("rendering helm chart: %w", err)
+		}
 
 		// - [ ] deploy kubewaarden policy server
 		log.Info(fmt.Sprintf("Deploying Kubewarden policy server controller to cluster %s", cluster.Name))
+
+		// annotate cluster so we don't try to deploy kubewarden again
+		log.Info(fmt.Sprintf("Successfully deployed Kubewarden to cluster %s: annotating with %s",
+			cluster.Name,
+			KubewardenInstalledAnnotation))
+
+		annotations := cluster.GetAnnotations()
+		if annotations == nil {
+			annotations = map[string]string{}
+		}
+
+		annotations[KubewardenInstalledAnnotation] = "true"
+		cluster.SetAnnotations(annotations)
+
+		annotations = cluster.GetAnnotations()
+		log.Info(fmt.Sprintf("Successfully annotated cluster %s with %v",
+			cluster.Name,
+			annotations))
+
 	}
 
 	return ctrl.Result{}, nil
@@ -246,12 +265,8 @@ func createKubewardenNamespace(ctx context.Context, remoteClient client.Client) 
 	return nil
 }
 
-func (r *KubewardenAddonReconciler) applyKubewardenCRDs() ([]*apiextensionsv1.CustomResourceDefinition, error) {
-	return nil, nil
-}
-
 func (r *KubewardenAddonReconciler) installKubewardenCRDs(ctx context.Context, version string, remoteClient client.Client) error {
-	// Download the CRDs tarball
+	// kubewarden crds are published as a tarball on github releases
 	crdsURL := fmt.Sprintf("%s/%s/%s/CRDS.tar.gz", kubewardenControllerRepository, githubReleasesPath, version)
 	crdsPath, err := downloadFile(crdsURL)
 	if err != nil {
@@ -259,14 +274,12 @@ func (r *KubewardenAddonReconciler) installKubewardenCRDs(ctx context.Context, v
 	}
 	defer os.Remove(crdsPath)
 
-	// Extract the tarball
 	extractDir, err := extractTarGz(crdsPath)
 	if err != nil {
 		return fmt.Errorf("extract CRDs: %w", err)
 	}
 	defer os.RemoveAll(extractDir)
 
-	// Apply each YAML file
 	files, err := filepath.Glob(filepath.Join(extractDir, "*.yaml"))
 	if err != nil {
 		return fmt.Errorf("list extracted files: %w", err)
@@ -278,4 +291,59 @@ func (r *KubewardenAddonReconciler) installKubewardenCRDs(ctx context.Context, v
 	}
 
 	return nil
+}
+
+func renderHelmChart(ctx context.Context, name, version string, values map[string]interface{}) (string, error) {
+	_, settings, err := createActionConfig(ctx, kubewardenNamespace)
+	if err != nil {
+		return "", err
+	}
+
+	var chartPathOptions action.ChartPathOptions = action.ChartPathOptions{
+		RepoURL: kubewardenHelmChartURL,
+		// this is chart version != app version & specific for each kubewarden chart
+		// if empty, the latest version is used
+		Version: version,
+	}
+
+	chart, err := getChart(chartPathOptions, name, settings)
+	if err != nil {
+		return "", err
+	}
+
+	rendered, err := helmTemplate(TemplateConfig{
+		ReleaseName: kubewardenHelmReleaseName,
+		Namespace:   kubewardenNamespace,
+		Chart:       chart,
+		Values:      values,
+	})
+	if err != nil {
+		return "", err
+	}
+
+	return rendered, nil
+}
+
+func createActionConfig(ctx context.Context, targetNamespace string) (*action.Configuration, *cli.EnvSettings, error) {
+	log := log.FromContext(ctx)
+	settings := cli.New()
+	actionConfig := new(action.Configuration)
+
+	err := actionConfig.Init(settings.RESTClientGetter(), targetNamespace, os.Getenv("HELM_DRIVER"), log.Info)
+
+	return actionConfig, settings, err
+}
+
+func getChart(chartPathOption action.ChartPathOptions, chartName string, settings *cli.EnvSettings) (*chart.Chart, error) {
+	chartPath, err := chartPathOption.LocateChart(chartName, settings)
+	if err != nil {
+		return nil, err
+	}
+
+	chart, err := loader.Load(chartPath)
+	if err != nil {
+		return nil, err
+	}
+
+	return chart, nil
 }
