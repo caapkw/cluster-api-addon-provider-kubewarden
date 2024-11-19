@@ -118,26 +118,33 @@ var _ = Describe("KubewardenAddon Controller", func() {
 			}
 
 			By("Reconciling the created resource")
-			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
-			})
-			Expect(err).NotTo(HaveOccurred())
+			Eventually(func(g Gomega) {
+				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: typeNamespacedName,
+				})
+				g.Expect(err).NotTo(HaveOccurred())
 
-			By("Kubewarden namespace should exist in workload cluster")
-			kubewardenNs := &corev1.Namespace{}
-			Expect(workloadClient.Get(ctx, client.ObjectKey{Name: kubewardenNamespace}, kubewardenNs)).To(Succeed())
+				By("Kubewarden namespace should exist in workload cluster")
+				kubewardenNs := &corev1.Namespace{}
+				g.Expect(workloadClient.Get(ctx, client.ObjectKey{Name: kubewardenNamespace}, kubewardenNs)).To(Succeed())
 
-			By("Kubewarden CRDs should exist in workload cluster")
-			kubewardenCRDs := []string{
-				"admissionpolicies.policies.kubewarden.io",
-				"clusteradmissionpolicies.policies.kubewarden.io",
-				"policyservers.policies.kubewarden.io",
-			}
-			for _, crd := range kubewardenCRDs {
-				By(fmt.Sprintf("Checking CRD %s", crd))
-				policyCRD := &apiextensionsv1.CustomResourceDefinition{}
-				Expect(workloadClient.Get(ctx, client.ObjectKey{Name: crd}, policyCRD)).To(Succeed())
-			}
+				By("Kubewarden CRDs should exist in workload cluster")
+				kubewardenCRDs := []string{
+					"admissionpolicies.policies.kubewarden.io",
+					"clusteradmissionpolicies.policies.kubewarden.io",
+					"policyservers.policies.kubewarden.io",
+				}
+				for _, crd := range kubewardenCRDs {
+					By(fmt.Sprintf("Checking CRD %s", crd))
+					policyCRD := &apiextensionsv1.CustomResourceDefinition{}
+					g.Expect(workloadClient.Get(ctx, client.ObjectKey{Name: crd}, policyCRD)).To(Succeed())
+				}
+				//By("Cluster should have installed annotation")
+				//g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(cluster), cluster)).To(Succeed())
+				//annotations := cluster.GetAnnotations()
+				//_, ok := annotations[KubewardenInstalledAnnotation]
+				//g.Expect(ok).To(BeTrue())
+			}).Should(Succeed())
 		})
 	})
 })

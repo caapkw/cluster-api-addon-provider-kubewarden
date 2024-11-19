@@ -11,7 +11,12 @@ import (
 	"path/filepath"
 	"time"
 
+	"helm.sh/helm/v3/pkg/action"
+	"helm.sh/helm/v3/pkg/chart"
+
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/yaml"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -22,9 +27,14 @@ const (
 	kubewardenNamespace            = "kubewarden"
 	kubewardenControllerRepository = "https://github.com/kubewarden/kubewarden-controller"
 	githubReleasesPath             = "releases/download"
-	kubewardenVersion              = "v1.18.0"
+	kubewardenVersion              = "v1.18.0" // app version
+
+	kubewardenHelmChartURL    = "https://charts.kubewarden.io/"
+	kubewardenHelmReleaseName = "kubewarden"
 
 	defaultRequeueDuration = 1 * time.Minute
+
+	KubewardenInstalledAnnotation = "caapkw.kubewarden.io/installed"
 )
 
 // applyManifest applies a single YAML manifest to the cluster
@@ -46,8 +56,11 @@ func applyManifest(ctx context.Context, k8sClient client.Client, filePath string
 			return fmt.Errorf("failed to decode manifest: %w", err)
 		}
 
+		// only create objects if they don't exist in the cluster already
 		if err := k8sClient.Create(ctx, obj); err != nil {
-			return fmt.Errorf("failed to apply resource: %w", err)
+			if !apierrors.IsAlreadyExists(err) {
+				return fmt.Errorf("failed to apply resource: %w", err)
+			}
 		}
 	}
 
@@ -128,4 +141,43 @@ func extractTarGz(tarGzPath string) (string, error) {
 	}
 
 	return extractDir, nil
+}
+
+type TemplateConfig struct {
+	ReleaseName string
+	Chart       *chart.Chart
+	Namespace   string
+	IncludeCRDs bool
+	Values      map[string]interface{}
+}
+
+func helmTemplate(config TemplateConfig) (string, error) {
+	client := action.NewInstall(&action.Configuration{})
+
+	client.ClientOnly = true
+	client.DryRun = true
+	client.ReleaseName = config.ReleaseName
+	client.IncludeCRDs = config.IncludeCRDs
+	client.Namespace = config.Namespace
+	client.DisableHooks = true
+
+	// Render chart.
+	rel, err := client.Run(config.Chart, config.Values)
+	if err != nil {
+		return "", fmt.Errorf("could not render helm chart correctly: %w", err)
+	}
+
+	return rel.Manifest, nil
+}
+
+// HasAnnotation returns true if the object has the specified annotation.
+func HasAnnotation(o metav1.Object, annotation string) bool {
+	annotations := o.GetAnnotations()
+	if annotations == nil {
+		return false
+	}
+
+	_, ok := annotations[annotation]
+
+	return ok
 }
