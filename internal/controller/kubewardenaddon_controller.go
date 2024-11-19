@@ -19,8 +19,11 @@ package controller
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 
 	corev1 "k8s.io/api/core/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -153,28 +156,23 @@ func (r *KubewardenAddonReconciler) reconcileNormal(ctx context.Context, addon *
 			return ctrl.Result{}, fmt.Errorf("getting remote cluster client: %w", err)
 		}
 
-		// - [ ] ensure namespace exists
-		log.Info(fmt.Sprintf("Ensuring namespace 'kubewarden' exists in cluster %s", cluster.Name))
-		ns := &corev1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: kubewardenNamespace,
-			},
-		}
 		// create kubewarden namespace
-		if err := remoteClient.Create(ctx, ns); err != nil {
-			// ignore error if namespace already exists
-			if !apierrors.IsAlreadyExists(err) {
-				return ctrl.Result{}, fmt.Errorf("creating namespace: %w", err)
-			}
+		log.Info(fmt.Sprintf("Creating namespace '%s'", kubewardenNamespace))
+		if err := createKubewardenNamespace(ctx, remoteClient); err != nil {
+			return ctrl.Result{}, fmt.Errorf("creating kubewarden namespace: %w", err)
 		}
 
-		// - [ ] apply CRDs
+		// create kubewarden crds
 		log.Info(fmt.Sprintf("Applying Kubewarden CRDs to cluster %s", cluster.Name))
+		err = r.installKubewardenCRDs(ctx, kubewardenVersion, remoteClient) // kubewardenVersion is a placeholder until we can use the value from KubewardenAddon.Spec.Version
+		if err != nil {
+			return ctrl.Result{}, fmt.Errorf("creating kubewarden CRDs: %w", err)
+		}
 
 		// - [ ] install kubewarden-controller
 		log.Info(fmt.Sprintf("Installing Kubewarden controller to cluster %s", cluster.Name))
 
-		// - [ ] install kubewaarden-defaults
+		// - [ ] install kubewarden-defaults
 		log.Info(fmt.Sprintf("Installing Kubewarden defaults controller to cluster %s", cluster.Name))
 
 		// - [ ] deploy kubewaarden policy server
@@ -230,4 +228,54 @@ func (r *KubewardenAddonReconciler) getAllCapiClusters(ctx context.Context, ns s
 	}
 
 	return clusters.Items, nil
+}
+
+func createKubewardenNamespace(ctx context.Context, remoteClient client.Client) error {
+	ns := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: kubewardenNamespace,
+		},
+	}
+
+	if err := remoteClient.Create(ctx, ns); err != nil {
+		if !apierrors.IsAlreadyExists(err) {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (r *KubewardenAddonReconciler) applyKubewardenCRDs() ([]*apiextensionsv1.CustomResourceDefinition, error) {
+	return nil, nil
+}
+
+func (r *KubewardenAddonReconciler) installKubewardenCRDs(ctx context.Context, version string, remoteClient client.Client) error {
+	// Download the CRDs tarball
+	crdsURL := fmt.Sprintf("%s/%s/%s/CRDS.tar.gz", kubewardenControllerRepository, githubReleasesPath, version)
+	crdsPath, err := downloadFile(crdsURL)
+	if err != nil {
+		return fmt.Errorf("download CRDs tarball: %w", err)
+	}
+	defer os.Remove(crdsPath)
+
+	// Extract the tarball
+	extractDir, err := extractTarGz(crdsPath)
+	if err != nil {
+		return fmt.Errorf("extract CRDs: %w", err)
+	}
+	defer os.RemoveAll(extractDir)
+
+	// Apply each YAML file
+	files, err := filepath.Glob(filepath.Join(extractDir, "*.yaml"))
+	if err != nil {
+		return fmt.Errorf("list extracted files: %w", err)
+	}
+	for _, file := range files {
+		if err := applyManifest(ctx, remoteClient, file); err != nil {
+			return fmt.Errorf("apply CRD from file %s: %w", file, err)
+		}
+	}
+
+	return nil
 }

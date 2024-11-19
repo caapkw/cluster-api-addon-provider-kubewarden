@@ -23,6 +23,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
@@ -70,7 +71,6 @@ var _ = Describe("KubewardenAddon Controller", func() {
 				},
 			}
 
-			By("creating the custom resource for the Kind KubewardenAddon")
 			err := k8sClient.Get(ctx, typeNamespacedName, kubewardenaddon)
 			if err != nil && errors.IsNotFound(err) {
 				resource := &addonv1alpha1.KubewardenAddon{
@@ -84,7 +84,19 @@ var _ = Describe("KubewardenAddon Controller", func() {
 		})
 
 		AfterEach(func() {
-			// TODO(user): Cleanup logic after each test, like removing the resource instance.
+			resource := &addonv1alpha1.KubewardenAddon{}
+			err := k8sClient.Get(ctx, typeNamespacedName, resource)
+			Expect(err).NotTo(HaveOccurred())
+
+			resourcesToCleanup := []client.Object{
+				resource,
+				capiCluster,
+			}
+
+			for _, resource := range resourcesToCleanup {
+				By(fmt.Sprintf("Cleanup the object %s", resource.GetName()))
+				Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+			}
 		})
 
 		It("should successfully reconcile the resource", func() {
@@ -111,13 +123,21 @@ var _ = Describe("KubewardenAddon Controller", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			By(fmt.Sprintf("Checking namespace %s exists", kubewardenNamespace))
-			// kubewarden namespace should exist
+			By("Kubewarden namespace should exist in workload cluster")
 			kubewardenNs := &corev1.Namespace{}
-			err = workloadClient.Get(ctx, client.ObjectKey{Name: kubewardenNamespace}, kubewardenNs)
-			Expect(err).NotTo(HaveOccurred())
-			// TODO(user): Add more specific assertions depending on your controller's reconciliation logic.
-			// Example: If you expect a certain status condition after reconciliation, verify it here.
+			Expect(workloadClient.Get(ctx, client.ObjectKey{Name: kubewardenNamespace}, kubewardenNs)).To(Succeed())
+
+			By("Kubewarden CRDs should exist in workload cluster")
+			kubewardenCRDs := []string{
+				"admissionpolicies.policies.kubewarden.io",
+				"clusteradmissionpolicies.policies.kubewarden.io",
+				"policyservers.policies.kubewarden.io",
+			}
+			for _, crd := range kubewardenCRDs {
+				By(fmt.Sprintf("Checking CRD %s", crd))
+				policyCRD := &apiextensionsv1.CustomResourceDefinition{}
+				Expect(workloadClient.Get(ctx, client.ObjectKey{Name: crd}, policyCRD)).To(Succeed())
+			}
 		})
 	})
 })
