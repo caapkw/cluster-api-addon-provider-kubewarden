@@ -34,7 +34,5 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
     - name: Build and push docker images
-      shell: bash
       run: |
-        IID_FILE=$(mktemp)
-        make docker-build-and-push TAG=${{ env.TAG }} REGISTRY=${{ env.REGISTRY }} ORG=${{ env.ORG }} IID_FILE=${IID_FILE}
+        make docker-build-and-push TAG=${{ env.TAG }} REGISTRY=${{ env.REGISTRY }} ORG=${{ env.ORG }}
