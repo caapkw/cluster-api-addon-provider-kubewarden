@@ -6,7 +6,7 @@ on:
   workflow_dispatch: # Allow running manually on demand
 
 env:
-  TAG: v0.0.1
+  TAG: v0.0.0-${{ github.sha }}
   REGISTRY: ghcr.io
   ORG: caapkw
 
