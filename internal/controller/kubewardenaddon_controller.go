@@ -272,13 +272,21 @@ func (r *KubewardenAddonReconciler) installKubewardenCRDs(ctx context.Context, v
 	if err != nil {
 		return fmt.Errorf("download CRDs tarball: %w", err)
 	}
-	defer os.Remove(crdsPath)
+	defer func() {
+		if err := os.Remove(crdsPath); err != nil {
+			fmt.Printf("Error removing CRDs tarball: %v\n", err)
+		}
+	}()
 
 	extractDir, err := extractTarGz(crdsPath)
 	if err != nil {
 		return fmt.Errorf("extract CRDs: %w", err)
 	}
-	defer os.RemoveAll(extractDir)
+	defer func() {
+		if err := os.RemoveAll(extractDir); err != nil {
+			fmt.Printf("Error removing extracted files: %v\n", err)
+		}
+	}()
 
 	files, err := filepath.Glob(filepath.Join(extractDir, "*.yaml"))
 	if err != nil {
