@@ -1,5 +1,5 @@
 /*
-Copyright 2024.
+Copyright 2024 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -20,22 +20,43 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
-
 // KubewardenAddonSpec defines the desired state of KubewardenAddon.
 type KubewardenAddonSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// Version specifies the version of Kubewarden to deploy.
+	Version string `json:"version,omitempty"`
 
-	// Foo is an example field of KubewardenAddon. Edit kubewardenaddon_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	// ImageRepository specifies the repository for pulling Kubewarden images.
+	ImageRepository string `json:"imageRepository,omitempty"`
+
+	// PolicyServerConfig holds configuration for the policy server.
+	PolicyServerConfig PolicyServerConfig `json:"policyServerConfig"`
+}
+
+// PolicyServerConfig represents the configuration options for the policy server.
+type PolicyServerConfig struct {
+	// Resources defines the CPU and memory resources for the policy server.
+	Resources ResourceRequirements `json:"resources,omitempty"`
+
+	// Replicas specifies the number of replicas for high availability.
+	Replicas int32 `json:"replicas,omitempty"`
+}
+
+// ResourceRequirements defines CPU and memory resource limits and requests.
+type ResourceRequirements struct {
+	// CPU request for the policy server.
+	CPU string `json:"cpu,omitempty"`
+
+	// Memory request for the policy server.
+	Memory string `json:"memory,omitempty"`
 }
 
 // KubewardenAddonStatus defines the observed state of KubewardenAddon.
 type KubewardenAddonStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// Ready indicates whether the addon is successfully deployed.
+	Ready bool `json:"ready"`
+
+	// Conditions represent the latest available observations of the addon state.
+	Conditions []metav1.Condition `json:"conditions"`
 }
 
 // +kubebuilder:object:root=true
