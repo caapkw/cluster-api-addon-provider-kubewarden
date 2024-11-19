@@ -77,7 +77,11 @@ func downloadFile(url string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to download file: %w", err)
 	}
-	defer response.Body.Close()
+	defer func() {
+		if err := response.Body.Close(); err != nil {
+			fmt.Printf("Error closing response body: %v\n", err)
+		}
+	}()
 
 	if response.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("failed to download file: HTTP %d", response.StatusCode)
@@ -87,7 +91,11 @@ func downloadFile(url string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to create temp file: %w", err)
 	}
-	defer tempFile.Close()
+	defer func() {
+		if err := tempFile.Close(); err != nil {
+			fmt.Printf("Error closing temp file: %v\n", err)
+		}
+	}()
 
 	_, err = io.Copy(tempFile, response.Body)
 	if err != nil {
@@ -103,13 +111,21 @@ func extractTarGz(tarGzPath string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to open tar.gz file: %w", err)
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			fmt.Printf("Error closing file: %v\n", err)
+		}
+	}()
 
 	gzipReader, err := gzip.NewReader(file)
 	if err != nil {
 		return "", fmt.Errorf("failed to create gzip reader: %w", err)
 	}
-	defer gzipReader.Close()
+	defer func() {
+		if err := gzipReader.Close(); err != nil {
+			fmt.Printf("Error closing gzip reader: %v\n", err)
+		}
+	}()
 
 	extractDir, err := os.MkdirTemp("", "kubewarden-crds-*")
 	if err != nil {
@@ -137,7 +153,11 @@ func extractTarGz(tarGzPath string) (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("failed to create file %s: %w", targetPath, err)
 		}
-		defer outFile.Close()
+		defer func() {
+			if err := outFile.Close(); err != nil {
+				fmt.Printf("Error closing file: %v\n", err)
+			}
+		}()
 
 		if _, err := io.Copy(outFile, tarReader); err != nil {
 			return "", fmt.Errorf("failed to write file %s: %w", targetPath, err)
