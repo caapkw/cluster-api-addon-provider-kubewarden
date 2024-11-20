@@ -23,6 +23,7 @@ import (
 	"runtime"
 	"testing"
 
+	policiesv1 "github.com/kubewarden/kubewarden-controller/api/policies/v1"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -90,6 +91,7 @@ var _ = BeforeSuite(func() {
 
 	Expect(addonv1alpha1.AddToScheme(scheme.Scheme)).To(Succeed())
 	Expect(clusterv1.AddToScheme(scheme.Scheme)).To(Succeed())
+	Expect(policiesv1.AddToScheme(scheme.Scheme)).To(Succeed())
 
 	// +kubebuilder:scaffold:scheme
 

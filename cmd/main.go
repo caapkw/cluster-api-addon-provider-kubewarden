@@ -37,6 +37,7 @@ import (
 
 	addonv1alpha1 "github.com/caapkw/cluster-api-provider-addon-kubewarden/api/v1alpha1"
 	"github.com/caapkw/cluster-api-provider-addon-kubewarden/internal/controller"
+	policiesv1 "github.com/kubewarden/kubewarden-controller/api/policies/v1"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	// +kubebuilder:scaffold:imports
 )
@@ -50,6 +51,7 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(clusterv1.AddToScheme(scheme))
 	utilruntime.Must(addonv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(policiesv1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 }
 
