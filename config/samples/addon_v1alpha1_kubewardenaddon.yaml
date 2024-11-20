@@ -6,14 +6,10 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: kubewardenaddon-sample
 spec:
-  version: v0.1.0
-  imageRepository: ghcr.io/kubewarden/kubewarden-controller:v1.18.0
+  version: ""
+  imageRepository: ghcr.io/kubewarden/kubewarden-controller
   policyServerConfig: 
     replicas: 1
     resources:
-      requests:
-        cpu: 100m
-        memory: 128Mi
-      limits:
-        cpu: 100m
-        memory: 128Mi
+      cpu: 100m
+      memory: 128Mi
