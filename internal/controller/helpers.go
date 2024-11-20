@@ -14,10 +14,11 @@ import (
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/chart"
 
-	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/yaml"
+	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -29,8 +30,9 @@ const (
 	githubReleasesPath             = "releases/download"
 	kubewardenVersion              = "v1.18.0" // app version
 
-	kubewardenHelmChartURL    = "https://charts.kubewarden.io/"
-	kubewardenHelmReleaseName = "kubewarden"
+	kubewardenHelmChartURL                = "https://charts.kubewarden.io/"
+	kubewardenHelmReleaseName             = "caapkw"
+	kubewardenHelmDefaultPolicyServerName = "default"
 
 	defaultRequeueDuration = 1 * time.Minute
 
@@ -51,8 +53,9 @@ func applyManifest(ctx context.Context, k8sClient client.Client, filePath string
 
 	decoder := yaml.NewYAMLOrJSONDecoder(file, 1024)
 	for {
-		obj := &apiextensionsv1.CustomResourceDefinition{}
-		err := decoder.Decode(obj)
+		// use unknown to be able to decode any k8s object
+		unk := &runtime.Unknown{}
+		err := decoder.Decode(unk)
 		if err != nil {
 			if err == io.EOF {
 				break
@@ -60,6 +63,19 @@ func applyManifest(ctx context.Context, k8sClient client.Client, filePath string
 			return fmt.Errorf("failed to decode manifest: %w", err)
 		}
 
+		// decode into a runtime.Object
+		runtimeObject, kind, err := scheme.Codecs.UniversalDeserializer().Decode(unk.Raw, nil, nil)
+		if kind == nil {
+			// this is an invalid object, skip it
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("failed to decode runtime object: %w", err)
+		}
+		obj, ok := runtimeObject.(client.Object)
+		if !ok {
+			return fmt.Errorf("failed to cast runtime object to client.Object")
+		}
 		// only create objects if they don't exist in the cluster already
 		if err := k8sClient.Create(ctx, obj); err != nil {
 			if !apierrors.IsAlreadyExists(err) {
@@ -168,11 +184,12 @@ func extractTarGz(tarGzPath string) (string, error) {
 }
 
 type TemplateConfig struct {
-	ReleaseName string
-	Chart       *chart.Chart
-	Namespace   string
-	IncludeCRDs bool
-	Values      map[string]interface{}
+	ReleaseName    string
+	Chart          *chart.Chart
+	Namespace      string
+	IncludeCRDs    bool
+	Values         map[string]interface{}
+	UseReleaseName bool
 }
 
 func helmTemplate(config TemplateConfig) (string, error) {

@@ -20,8 +20,10 @@ import (
 	"context"
 	"fmt"
 
+	policiesv1 "github.com/kubewarden/kubewarden-controller/api/policies/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -139,11 +141,26 @@ var _ = Describe("KubewardenAddon Controller", func() {
 					policyCRD := &apiextensionsv1.CustomResourceDefinition{}
 					g.Expect(workloadClient.Get(ctx, client.ObjectKey{Name: crd}, policyCRD)).To(Succeed())
 				}
-				// By("Cluster should have installed annotation")
-				// g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(cluster), cluster)).To(Succeed())
-				// annotations := cluster.GetAnnotations()
-				// _, ok := annotations[KubewardenInstalledAnnotation]
-				// g.Expect(ok).To(BeTrue())
+
+				By("Kubewarden controller should be installed in workload cluster")
+				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(cluster), cluster)).To(Succeed())
+				deployment := &appsv1.Deployment{}
+				err := workloadClient.Get(ctx, client.ObjectKey{Name: fmt.Sprintf("%s-kubewarden-controller", kubewardenHelmReleaseName), Namespace: kubewardenNamespace}, deployment)
+				g.Expect(err).ToNot(HaveOccurred(), fmt.Sprintf("%s-kubewarden-controller deployment should exist", kubewardenHelmReleaseName))
+				g.Expect(deployment.Name).To(Equal(fmt.Sprintf("%s-kubewarden-controller", kubewardenHelmReleaseName)))
+
+				By("Kubewarden defaults should be installed in workload cluster")
+				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(cluster), cluster)).To(Succeed())
+				policyServer := &policiesv1.PolicyServer{}
+				err = workloadClient.Get(ctx, client.ObjectKey{Name: kubewardenHelmDefaultPolicyServerName, Namespace: kubewardenNamespace}, policyServer)
+				g.Expect(err).ToNot(HaveOccurred(), fmt.Sprintf("%s policy server should exist", kubewardenHelmDefaultPolicyServerName))
+				g.Expect(policyServer.GetName()).To(Equal(kubewardenHelmDefaultPolicyServerName))
+
+				By("Cluster should have installed annotation")
+				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(cluster), cluster)).To(Succeed())
+				annotations := cluster.GetAnnotations()
+				_, ok := annotations[KubewardenInstalledAnnotation]
+				g.Expect(ok).To(BeTrue())
 			}).Should(Succeed())
 		})
 	})

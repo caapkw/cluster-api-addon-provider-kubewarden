@@ -163,20 +163,15 @@ func (r *KubewardenAddonReconciler) reconcileNormal(ctx context.Context, addon *
 
 		// install kubewarden-controller
 		log.Info(fmt.Sprintf("Installing Kubewarden controller to cluster %s", cluster.Name))
-		_, err = renderHelmChart(ctx, "kubewarden-controller", "", nil)
-		if err != nil {
-			return ctrl.Result{}, fmt.Errorf("rendering helm chart: %w", err)
+		if err := r.installKubewardenController(ctx, remoteClient, addon); err != nil {
+			return ctrl.Result{}, fmt.Errorf("installing kubewarden controller: %w", err)
 		}
 
 		// install kubewarden-defaults
-		log.Info(fmt.Sprintf("Installing Kubewarden defaults controller to cluster %s", cluster.Name))
-		_, err = renderHelmChart(ctx, "kubewarden-defaults", "", nil)
-		if err != nil {
-			return ctrl.Result{}, fmt.Errorf("rendering helm chart: %w", err)
+		log.Info(fmt.Sprintf("Installing Kubewarden defaults to cluster %s", cluster.Name))
+		if err := r.installKubewardenDefaults(ctx, remoteClient, addon); err != nil {
+			return ctrl.Result{}, fmt.Errorf("installing kubewarden defaults: %w", err)
 		}
-
-		// - [ ] deploy kubewaarden policy server
-		log.Info(fmt.Sprintf("Deploying Kubewarden policy server controller to cluster %s", cluster.Name))
 
 		// annotate cluster so we don't try to deploy kubewarden again
 		log.Info(fmt.Sprintf("Successfully deployed Kubewarden to cluster %s: annotating with %s",
@@ -190,6 +185,10 @@ func (r *KubewardenAddonReconciler) reconcileNormal(ctx context.Context, addon *
 
 		annotations[KubewardenInstalledAnnotation] = "true"
 		cluster.SetAnnotations(annotations)
+
+		if err := r.Client.Update(ctx, &cluster); err != nil {
+			return ctrl.Result{}, fmt.Errorf("update cluster annotations: %w", err)
+		}
 
 		annotations = cluster.GetAnnotations()
 		log.Info(fmt.Sprintf("Successfully annotated cluster %s with %v",
@@ -301,6 +300,32 @@ func (r *KubewardenAddonReconciler) installKubewardenCRDs(ctx context.Context, v
 	return nil
 }
 
+func (r *KubewardenAddonReconciler) installKubewardenController(ctx context.Context, remoteClient client.Client, addon *addonv1alpha1.KubewardenAddon) error {
+	// render kubewarden-controller helm chart and apply it to the cluster
+	renderedPath, err := renderHelmChart(ctx, "kubewarden-controller", addon.Spec.Version, nil)
+	if err != nil {
+		return fmt.Errorf("render kubewarden-controller helm chart: %w", err)
+	}
+	if err := applyManifest(ctx, remoteClient, renderedPath); err != nil {
+		return fmt.Errorf("apply kubewarden-controller manifest: %w", err)
+	}
+
+	return nil
+}
+
+func (r *KubewardenAddonReconciler) installKubewardenDefaults(ctx context.Context, remoteClient client.Client, addon *addonv1alpha1.KubewardenAddon) error {
+	// render kubewarden-defaults helm chart and apply it to the cluster
+	renderedPath, err := renderHelmChart(ctx, "kubewarden-defaults", addon.Spec.Version, nil)
+	if err != nil {
+		return fmt.Errorf("render kubewarden-defaults helm chart: %w", err)
+	}
+	if err := applyManifest(ctx, remoteClient, renderedPath); err != nil {
+		return fmt.Errorf("apply kubewarden-defaults manifest: %w", err)
+	}
+
+	return nil
+}
+
 func renderHelmChart(ctx context.Context, name, version string, values map[string]interface{}) (string, error) {
 	_, settings, err := createActionConfig(ctx, kubewardenNamespace)
 	if err != nil {
@@ -329,7 +354,22 @@ func renderHelmChart(ctx context.Context, name, version string, values map[strin
 		return "", err
 	}
 
-	return rendered, nil
+	renderedFile, err := os.CreateTemp("", "kubewarden-helm-rendered-*.yaml")
+	if err != nil {
+		return "", err
+	}
+	defer func() {
+		if err := renderedFile.Close(); err != nil {
+			fmt.Printf("Error closing temporary file: %v\n", err)
+		}
+	}()
+
+	_, err = renderedFile.WriteString(rendered)
+	if err != nil {
+		return "", err
+	}
+
+	return renderedFile.Name(), nil
 }
 
 func createActionConfig(ctx context.Context, targetNamespace string) (*action.Configuration, *cli.EnvSettings, error) {
