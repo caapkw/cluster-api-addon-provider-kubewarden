@@ -133,7 +133,7 @@ func (r *KubewardenAddonReconciler) reconcileNormal(ctx context.Context, addon *
 
 		// cluster must be ready before we can deploy kubewarden
 		if !cluster.Status.ControlPlaneReady && !conditions.IsTrue(&cluster, clusterv1.ControlPlaneReadyCondition) {
-			log.Info("clusters control plane is not ready, requeue")
+			log.Info("cluster's control plane is not ready, requeue", "cluster", cluster.Name)
 			return ctrl.Result{RequeueAfter: defaultRequeueDuration}, nil
 		}
 
@@ -206,13 +206,12 @@ func (r *KubewardenAddonReconciler) clusterToKubewardenAddon(ctx context.Context
 	return func(_ context.Context, o client.Object) []ctrl.Request {
 		// this cluster object will be used when we want to select which clusters
 		// to deploy kubewarden to
-		cluster, ok := o.(*clusterv1.Cluster)
+		_, ok := o.(*clusterv1.Cluster)
 		if !ok {
 			log.Error(nil, fmt.Sprintf("Expected a Cluster but got a %T", o))
 
 			return nil
 		}
-		fmt.Println("cluster: ", cluster.Name)
 
 		addons := addonv1alpha1.KubewardenAddonList{}
 		if err := r.Client.List(ctx, &addons); err != nil {
