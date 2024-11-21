@@ -1,0 +1,39 @@
+name: Release
+
+on:
+  push:
+    tags:
+    - 'v*' # Push events to matching v*, i.e. v1.0, v20.15.10
+
+permissions:
+  contents: write # Allow to create a release.
+
+jobs:
+  build:
+    name: Create draft release
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: Set env
+        run:  echo "RELEASE_TAG=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+
+      - name: Checkout code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: Install go
+        uses: actions/setup-go@41dfa10bad2bb2ae585af6ee5bb4d7d973ad74ed # v5.1.0
+        with:
+          go-version: '=1.22'
+
+      - name: Cenerate release artifacts
+        run: |
+          make release
+
+      - name: Release
+        uses: softprops/action-gh-release@01570a1f39cb168c169c802c3bceb9e93fb10974 # v2.1.0
+        with:
+          files: out/*
+          draft: true
+          body_path: _releasenotes/release-notes-${{ env.RELEASE_TAG }}.md
