@@ -3,7 +3,7 @@ kind: Service
 metadata:
   labels:
     control-plane: controller-manager
-    app.kubernetes.io/name: capi-provider-kubewarden
+    app.kubernetes.io/name: caapkw
     app.kubernetes.io/managed-by: kustomize
   name: ctrl-mgr-metrics-service
   namespace: system

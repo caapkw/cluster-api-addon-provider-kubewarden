@@ -13,13 +13,14 @@ import (
 
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/chart"
+	"helm.sh/helm/v3/pkg/chart/loader"
+	"helm.sh/helm/v3/pkg/cli"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/util/yaml"
-	"k8s.io/client-go/kubernetes/scheme"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
@@ -39,52 +40,90 @@ const (
 	KubewardenInstalledAnnotation = "caapkw.kubewarden.io/installed"
 )
 
-// applyManifest applies a single YAML manifest to the cluster
-func applyManifest(ctx context.Context, k8sClient client.Client, filePath string) error {
-	file, err := os.Open(filePath)
-	if err != nil {
-		return fmt.Errorf("failed to open file: %w", err)
+func createKubewardenNamespace(ctx context.Context, remoteClient client.Client) error {
+	ns := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: kubewardenNamespace,
+		},
 	}
-	defer func() {
-		if err := file.Close(); err != nil {
-			fmt.Printf("Error closing file: %v\n", err)
-		}
-	}()
 
-	decoder := yaml.NewYAMLOrJSONDecoder(file, 1024)
-	for {
-		// use unknown to be able to decode any k8s object
-		unk := &runtime.Unknown{}
-		err := decoder.Decode(unk)
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
-			return fmt.Errorf("failed to decode manifest: %w", err)
-		}
-
-		// decode into a runtime.Object
-		runtimeObject, kind, err := scheme.Codecs.UniversalDeserializer().Decode(unk.Raw, nil, nil)
-		if kind == nil {
-			// this is an invalid object, skip it
-			break
-		}
-		if err != nil {
-			return fmt.Errorf("failed to decode runtime object: %w", err)
-		}
-		obj, ok := runtimeObject.(client.Object)
-		if !ok {
-			return fmt.Errorf("failed to cast runtime object to client.Object")
-		}
-		// only create objects if they don't exist in the cluster already
-		if err := k8sClient.Create(ctx, obj); err != nil {
-			if !apierrors.IsAlreadyExists(err) {
-				return fmt.Errorf("failed to apply resource: %w", err)
-			}
+	if err := remoteClient.Create(ctx, ns); err != nil {
+		if !apierrors.IsAlreadyExists(err) {
+			return err
 		}
 	}
 
 	return nil
+}
+
+func renderHelmChart(ctx context.Context, name, version string, values map[string]interface{}) (string, error) {
+	_, settings, err := createActionConfig(ctx, kubewardenNamespace)
+	if err != nil {
+		return "", err
+	}
+
+	var chartPathOptions action.ChartPathOptions = action.ChartPathOptions{
+		RepoURL: kubewardenHelmChartURL,
+		// this is chart version != app version & specific for each kubewarden chart
+		// if empty, the latest version is used
+		Version: version,
+	}
+
+	chart, err := getChart(chartPathOptions, name, settings)
+	if err != nil {
+		return "", err
+	}
+
+	rendered, err := helmTemplate(TemplateConfig{
+		ReleaseName: kubewardenHelmReleaseName,
+		Namespace:   kubewardenNamespace,
+		Chart:       chart,
+		Values:      values,
+	})
+	if err != nil {
+		return "", err
+	}
+
+	renderedFile, err := os.CreateTemp("", "kubewarden-helm-rendered-*.yaml")
+	if err != nil {
+		return "", err
+	}
+	defer func() {
+		if err := renderedFile.Close(); err != nil {
+			fmt.Printf("Error closing temporary file: %v\n", err)
+		}
+	}()
+
+	_, err = renderedFile.WriteString(rendered)
+	if err != nil {
+		return "", err
+	}
+
+	return renderedFile.Name(), nil
+}
+
+func createActionConfig(ctx context.Context, targetNamespace string) (*action.Configuration, *cli.EnvSettings, error) {
+	log := log.FromContext(ctx)
+	settings := cli.New()
+	actionConfig := new(action.Configuration)
+
+	err := actionConfig.Init(settings.RESTClientGetter(), targetNamespace, os.Getenv("HELM_DRIVER"), log.Info)
+
+	return actionConfig, settings, err
+}
+
+func getChart(chartPathOption action.ChartPathOptions, chartName string, settings *cli.EnvSettings) (*chart.Chart, error) {
+	chartPath, err := chartPathOption.LocateChart(chartName, settings)
+	if err != nil {
+		return nil, err
+	}
+
+	chart, err := loader.Load(chartPath)
+	if err != nil {
+		return nil, err
+	}
+
+	return chart, nil
 }
 
 // downloadFile downloads a file from a URL and returns the local path
