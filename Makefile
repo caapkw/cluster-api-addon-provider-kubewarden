@@ -26,6 +26,7 @@ export GOPROXY
 GO_VERSION ?= 1.22.0
 GO_CONTAINER_IMAGE ?= docker.io/library/golang:$(GO_VERSION)
 REGISTRY ?= ghcr.io
+PROD_REGISTRY ?= ghcr.io
 ORG ?= caapkw
 TAG ?= v0.0.1
 ARCH ?= linux/$(shell go env GOARCH)
@@ -34,6 +35,12 @@ MACHINE := caapkw-builder
 CONTROLLER_IMAGE_NAME ?= cluster-api-addon-provider-kubewarden
 CONTROLLER_IMG ?= $(REGISTRY)/$(ORG)/$(CONTROLLER_IMAGE_NAME)
 IID_FILE ?= $(shell mktemp)
+
+#
+# Directories.
+#
+
+BIN_DIR := bin
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -174,7 +181,7 @@ docker-build: buildx-machine docker-pull-prerequisites ## Build docker image for
 			--build-arg goproxy=$(GOPROXY) \
 			--build-arg package=. \
 			--build-arg ldflags="$(LDFLAGS)" . -t $(CONTROLLER_IMG):$(TAG)
-	MANIFEST_IMG=$(CONTROLLER_IMG) MANIFEST_TAG=$(TAG) $(MAKE) set-manifest-image
+	MANIFEST_IMG=$(CONTROLLER_IMG) MANIFEST_TAG=$(TAG) TARGET_RESOURCE="./config/default/manager_image_patch.yaml" $(MAKE) set-manifest-image
 
 .PHONY: docker-build-and-push
 docker-build-and-push: buildx-machine docker-pull-prerequisites ## Run docker-build-and-push targets for all architectures
@@ -189,7 +196,48 @@ docker-build-and-push: buildx-machine docker-pull-prerequisites ## Run docker-bu
 .PHONY: set-manifest-image
 set-manifest-image:
 	$(info Updating kustomize image patch file for default resource)
-	sed -i'' -e 's@image: .*@image: '"${MANIFEST_IMG}:$(MANIFEST_TAG)"'@' ./config/default/manager_image_patch.yaml
+	sed -i'' -e 's@image: .*@image: '"${MANIFEST_IMG}:$(MANIFEST_TAG)"'@' $(TARGET_RESOURCE)
+
+.PHONY: set-manifest-pull-policy
+set-manifest-pull-policy:
+	$(info Updating kustomize pull policy file for manager resources)
+	sed -i'' -e 's@imagePullPolicy: .*@imagePullPolicy: '"$(PULL_POLICY)"'@' $(TARGET_RESOURCE)
+
+## --------------------------------------
+## Cleanup / Verification
+## --------------------------------------
+
+##@ clean:
+
+.PHONY: clean
+clean: ## Remove generated binaries, GitBook files, Helm charts, and Tilt build files
+	$(MAKE) clean-bin
+
+.PHONY: clean-bin
+clean-bin: ## Remove all generated binaries
+	rm -rf $(BIN_DIR)
+
+.PHONY: clean-dev-env
+clean-dev-env:
+	kind delete cluster --name=caapkw-dev
+
+.PHONY: clean-release
+clean-release: ## Remove the release folder
+	rm -rf $(RELEASE_DIR)
+
+.PHONY: clean-release-git
+clean-release-git: ## Restores the git files usually modified during a release
+	git restore ./*manager_image_patch.yaml ./*manager_pull_policy.yaml
+
+## --------------------------------------
+## Hack / Tools
+## --------------------------------------
+
+##@ hack/tools:
+
+.PHONY: $(KUSTOMIZE_BIN)
+$(KUSTOMIZE_BIN): $(KUSTOMIZE) ## Build a local copy of kustomize.
+
 
 # PLATFORMS defines the target platforms for the manager image be built to provide support to multiple
 # architectures. (i.e. make docker-buildx CONTROLLER_IMG=myregistry/mypoperator:0.0.1). To use this option you need to:
@@ -242,6 +290,66 @@ build-kustomize: $(KUSTOMIZE)
 undeploy: kustomize ## Undeploy controller from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
 	$(KUSTOMIZE) build config/default | $(KUBECTL) delete --ignore-not-found=$(ignore-not-found) -f -
 
+## --------------------------------------
+## Release
+## --------------------------------------
+
+##@ release:
+
+## latest git tag for the commit, e.g., v0.3.10
+RELEASE_TAG ?= $(shell git describe --abbrev=0 2>/dev/null)
+ifneq (,$(findstring -,$(RELEASE_TAG)))
+    PRE_RELEASE=true
+endif
+# the previous release tag, e.g., v0.3.9, excluding pre-release tags
+PREVIOUS_TAG ?= $(shell git tag -l | grep -E "^v[0-9]+\.[0-9]+\.[0-9]+$$" | sort -V | grep -B1 $(RELEASE_TAG) | head -n 1 2>/dev/null)
+## set by Prow, ref name of the base branch, e.g., main
+RELEASE_ALIAS_TAG := $(PULL_BASE_REF)
+RELEASE_DIR := out
+RELEASE_NOTES_DIR := _releasenotes
+GIT_REPO_NAME ?= cluster-api-addon-provider-kubewarden
+GIT_ORG_NAME ?= caapkw
+
+.PHONY: $(RELEASE_DIR)
+$(RELEASE_DIR):
+	mkdir -p $(RELEASE_DIR)/
+
+.PHONY: $(RELEASE_NOTES_DIR)
+$(RELEASE_NOTES_DIR):
+	mkdir -p $(RELEASE_NOTES_DIR)/
+
+.PHONY: release
+release: clean-release ## Build and push container images using the latest git tag for the commit
+	@if [ -z "${RELEASE_TAG}" ]; then echo "RELEASE_TAG is not set"; exit 1; fi
+	@if ! [ -z "$$(git status --porcelain)" ]; then echo "Your local git repository contains uncommitted changes, use git clean before proceeding."; exit 1; fi
+	git checkout "${RELEASE_TAG}"
+	# Set the manifest images to the staging/production bucket and Builds the manifests to publish with a release.
+	$(MAKE) release-manifests-all
+	$(MAKE) release-metadata
+
+.PHONY: release-manifests-all
+release-manifests-all: # Set the manifest images to the staging/production bucket and Builds the manifests to publish with a release.
+	# Set the manifest image to the production bucket.
+	$(MAKE) manifest-modification REGISTRY=$(PROD_REGISTRY)
+	## Build the manifests
+	$(MAKE) release-manifests
+	## Clean the git artifacts modified in the release process
+	$(MAKE) clean-release-git
+
+.PHONY: manifest-modification
+manifest-modification: # Set the manifest images to the staging/production bucket.
+	$(MAKE) set-manifest-image MANIFEST_IMG=$(REGISTRY)/$(CONTROLLER_IMG) MANIFEST_TAG=$(RELEASE_TAG) TARGET_RESOURCE="./config/default/manager_image_patch.yaml"
+	$(MAKE) set-manifest-pull-policy PULL_POLICY=IfNotPresent TARGET_RESOURCE="./config/default/manager_pull_policy.yaml"
+
+
+.PHONY: release-manifests
+release-manifests: $(RELEASE_DIR) kustomize ## Build the manifests to publish with a release
+	$(KUSTOMIZE) build config/default > $(RELEASE_DIR)/addon-components.yaml
+
+.PHONY: release-metadata
+release-metadata: $(RELEASE_DIR)
+	cp metadata.yaml $(RELEASE_DIR)/metadata.yaml
+
 ##@ Dependencies
 
 ## Location to install dependencies to
@@ -281,14 +389,6 @@ $(ENVTEST): $(LOCALBIN)
 golangci-lint: $(GOLANGCI_LINT) ## Download golangci-lint locally if necessary.
 $(GOLANGCI_LINT): $(LOCALBIN)
 	$(call go-install-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/cmd/golangci-lint,$(GOLANGCI_LINT_VERSION))
-
-.PHONY: clean
-clean:
-	rm -rf out/ bin/
-
-.PHONY: clean-dev-env
-clean-dev-env:
-	kind delete cluster --name=caapkw-dev
 
 # go-install-tool will 'go install' any package with custom target and name of binary, if it doesn't exist
 # $1 - target path with name of binary
