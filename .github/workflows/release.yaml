@@ -8,12 +8,15 @@ on:
 permissions:
   contents: write # Allow to create a release.
 
+env:
+  REGISTRY: ghcr.io
+  ORG: caapkw
+
 jobs:
   build:
-    name: Create draft release
+    name: Create new release
     runs-on: ubuntu-latest
     steps:
-
       - name: Set env
         run:  echo "RELEASE_TAG=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
 
@@ -26,6 +29,19 @@ jobs:
         uses: actions/setup-go@41dfa10bad2bb2ae585af6ee5bb4d7d973ad74ed # v5.1.0
         with:
           go-version: '=1.22'
+
+      - name: Docker login to ghcr registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & Push docker image
+        shell: bash
+        run: |
+          IID_FILE=$(mktemp)
+          make docker-build-and-push TAG=${{ env.RELEASE_TAG }} REGISTRY=${{ env.REGISTRY }} ORG=${{ env.ORG }} IID_FILE=${IID_FILE}
 
       - name: Cenerate release artifacts
         run: |
