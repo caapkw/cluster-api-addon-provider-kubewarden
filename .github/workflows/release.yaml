@@ -8,7 +8,7 @@ on:
 permissions:
   actions: read
   contents: write # Allow to create a release.
-  package: write # Allow to publish a package.
+  packages: write # Allow to publish a package.
 
 env:
   REGISTRY: ghcr.io
