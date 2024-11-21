@@ -54,4 +54,3 @@ jobs:
         with:
           files: out/*
           draft: true
-          body_path: _releasenotes/release-notes-${{ env.RELEASE_TAG }}.md
