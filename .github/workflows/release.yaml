@@ -6,7 +6,9 @@ on:
     - 'v*' # Push events to matching v*, i.e. v1.0, v20.15.10
 
 permissions:
+  actions: read
   contents: write # Allow to create a release.
+  package: write # Allow to publish a package.
 
 env:
   REGISTRY: ghcr.io
