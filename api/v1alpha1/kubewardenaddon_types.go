@@ -17,12 +17,20 @@ limitations under the License.
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 )
 
 // KubewardenAddonSpec defines the desired state of KubewardenAddon.
 type KubewardenAddonSpec struct {
-	// Version specifies the version of Kubewarden to deploy.
+	// ClusterSelector selects Clusters in the same namespace with a label that matches the specified label selector. The Kubewarden
+	// will be installed on all selected Clusters.
+	ClusterSelector metav1.LabelSelector `json:"clusterSelector"`
+
+	// Version specifies the version of Kubewarden to deploy. If it is not specified, kubewarden will use
+	// and be kept up to date with the latest version.
+	// +optional
 	Version string `json:"version,omitempty"`
 
 	// ImageRepository specifies the repository for pulling Kubewarden images.
@@ -55,8 +63,13 @@ type KubewardenAddonStatus struct {
 	// Ready indicates whether the addon is successfully deployed.
 	Ready bool `json:"ready"`
 
-	// Conditions represent the latest available observations of the addon state.
-	Conditions []metav1.Condition `json:"conditions"`
+	// Conditions defines current state of the KubewardenAddon.
+	// +optional
+	Conditions clusterv1.Conditions `json:"conditions,omitempty"`
+
+	// MatchingClusters is the list of references to Clusters selected by the ClusterSelector.
+	// +optional
+	MatchingClusters []corev1.ObjectReference `json:"matchingClusters"`
 }
 
 // +kubebuilder:object:root=true
@@ -78,6 +91,31 @@ type KubewardenAddonList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []KubewardenAddon `json:"items"`
+}
+
+// GetConditions returns the list of conditions for an KubewardenAddon API object.
+func (c *KubewardenAddon) GetConditions() clusterv1.Conditions {
+	return c.Status.Conditions
+}
+
+// SetConditions will set the given conditions on an KubewardenAddon object.
+func (c *KubewardenAddon) SetConditions(conditions clusterv1.Conditions) {
+	c.Status.Conditions = conditions
+}
+
+// SetMatchingClusters will set the given list of matching clusters on an KubewardenAddon object.
+func (c *KubewardenAddon) SetMatchingClusters(clusterList []clusterv1.Cluster) {
+	matchingClusters := make([]corev1.ObjectReference, 0, len(clusterList))
+	for _, cluster := range clusterList {
+		matchingClusters = append(matchingClusters, corev1.ObjectReference{
+			Kind:       cluster.Kind,
+			APIVersion: cluster.APIVersion,
+			Name:       cluster.Name,
+			Namespace:  cluster.Namespace,
+		})
+	}
+
+	c.Status.MatchingClusters = matchingClusters
 }
 
 func init() {
