@@ -35,6 +35,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd/api"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -135,7 +136,7 @@ var _ = BeforeSuite(func() {
 	err = (&KubewardenAddonReconciler{
 		Client: k8sManager.GetClient(),
 		Scheme: k8sManager.GetScheme(),
-	}).SetupWithManager(ctx, k8sManager)
+	}).SetupWithManager(ctx, k8sManager, controller.Options{})
 	Expect(err).ToNot(HaveOccurred())
 
 	go func() {

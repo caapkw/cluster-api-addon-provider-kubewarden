@@ -25,21 +25,21 @@ import (
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
+	addonv1alpha1 "github.com/caapkw/cluster-api-provider-addon-kubewarden/api/v1alpha1"
+	"github.com/caapkw/cluster-api-provider-addon-kubewarden/internal/controller"
+	policiesv1 "github.com/kubewarden/kubewarden-controller/api/policies/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	ctrl "sigs.k8s.io/controller-runtime"
+	ctrlcontroller "sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
-
-	addonv1alpha1 "github.com/caapkw/cluster-api-provider-addon-kubewarden/api/v1alpha1"
-	"github.com/caapkw/cluster-api-provider-addon-kubewarden/internal/controller"
-	policiesv1 "github.com/kubewarden/kubewarden-controller/api/policies/v1"
-	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -63,6 +63,7 @@ func main() {
 	var probeAddr string
 	var secureMetrics bool
 	var enableHTTP2 bool
+	var kubewardenAddonConcurrency int
 	var tlsOpts []func(*tls.Config)
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
@@ -74,6 +75,8 @@ func main() {
 		"If set, the metrics endpoint is served securely via HTTPS. Use --metrics-secure=false to use HTTP instead.")
 	flag.BoolVar(&enableHTTP2, "enable-http2", false,
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
+	flag.IntVar(&kubewardenAddonConcurrency, "kubewarden-add-onn-concurrency", 10,
+		"Number of KubewardenAddons to process concurrently.")
 	opts := zap.Options{
 		Development: true,
 	}
@@ -130,7 +133,9 @@ func main() {
 	if err = (&controller.KubewardenAddonReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(ctx, mgr); err != nil {
+	}).SetupWithManager(ctx, mgr, ctrlcontroller.Options{
+		MaxConcurrentReconciles: kubewardenAddonConcurrency,
+	}); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "KubewardenAddon")
 		os.Exit(1)
 	}
