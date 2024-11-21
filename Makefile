@@ -338,7 +338,7 @@ release-manifests-all: # Set the manifest images to the staging/production bucke
 
 .PHONY: manifest-modification
 manifest-modification: # Set the manifest images to the staging/production bucket.
-	$(MAKE) set-manifest-image MANIFEST_IMG=$(REGISTRY)/$(CONTROLLER_IMG) MANIFEST_TAG=$(RELEASE_TAG) TARGET_RESOURCE="./config/default/manager_image_patch.yaml"
+	$(MAKE) set-manifest-image MANIFEST_IMG=$(REGISTRY)/$(ORG)/$(CONTROLLER_IMAGE_NAME) MANIFEST_TAG=$(RELEASE_TAG) TARGET_RESOURCE="./config/default/manager_image_patch.yaml"
 	$(MAKE) set-manifest-pull-policy PULL_POLICY=IfNotPresent TARGET_RESOURCE="./config/default/manager_pull_policy.yaml"
 
 
