@@ -6,6 +6,7 @@ require (
 	github.com/kubewarden/kubewarden-controller v1.18.0
 	github.com/onsi/ginkgo/v2 v2.21.0
 	github.com/onsi/gomega v1.35.1
+	github.com/pkg/errors v0.9.1
 	helm.sh/helm/v3 v3.16.3
 	k8s.io/api v0.31.2
 	k8s.io/apiextensions-apiserver v0.31.1
@@ -111,7 +112,6 @@ require (
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.0 // indirect
 	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
-	github.com/pkg/errors v0.9.1 // indirect
 	github.com/prometheus/client_golang v1.19.1 // indirect
 	github.com/prometheus/client_model v0.6.1 // indirect
 	github.com/prometheus/common v0.55.0 // indirect
