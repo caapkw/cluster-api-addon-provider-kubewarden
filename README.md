@@ -1,6 +1,7 @@
 # CAPI Addon Provider Kubewarden - CAAPKW
 
 <a href="https://cluster-api.sigs.k8s.io"><img alt="capi" src="./logos/kubernetes-cluster-logos_final-02.svg" width="160x" /></a>
+<a href="https://docs.kubewarden.io/"><img alt="kubewarden" src="./logos/kubewarden.png" width="160x" /></a>
 <p>
 <a href="https://github.com/caapkw/cluster-api-addon-provider-kubewarden"><img src="https://godoc.org/sigs.k8s.io/cluster-api?status.svg"></a>
 </p>
