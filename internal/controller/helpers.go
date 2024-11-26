@@ -24,8 +24,6 @@ import (
 )
 
 const (
-	deployToAll = true
-
 	kubewardenNamespace            = "kubewarden"
 	kubewardenControllerRepository = "https://github.com/kubewarden/kubewarden-controller"
 	githubReleasesPath             = "releases/download"
