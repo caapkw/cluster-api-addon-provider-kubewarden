@@ -39,7 +39,7 @@ var _ webhook.Defaulter = &KubewardenAddon{}
 
 // Default implements webhook.Defaulter so a webhook will be registered for the type.
 func (p *KubewardenAddon) Default() {
-	kubewardenaddonlog.Info("default", "name", p.Name)
+	kubewardenaddonlog.Info("default", "name", p.GetName())
 
 	if p.Spec.ImageRepository == "" {
 		p.Spec.ImageRepository = "ghcr.io/kubewarden/kubewarden-controller:v1.18.0"
@@ -56,7 +56,7 @@ var _ webhook.Validator = &KubewardenAddon{}
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type.
 func (r *KubewardenAddon) ValidateCreate() (admission.Warnings, error) {
-	kubewardenaddonlog.Info("validate create", "name", r.Name)
+	kubewardenaddonlog.Info("validate create", "name", r.GetName())
 
 	// TODO(user): fill in your validation logic upon object creation.
 	return nil, nil
@@ -64,7 +64,7 @@ func (r *KubewardenAddon) ValidateCreate() (admission.Warnings, error) {
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type.
 func (r *KubewardenAddon) ValidateUpdate(old runtime.Object) (admission.Warnings, error) {
-	kubewardenaddonlog.Info("validate update", "name", r.Name)
+	kubewardenaddonlog.Info("validate update", "name", r.GetName())
 
 	// TODO(user): fill in your validation logic upon object update.
 	return nil, nil
@@ -72,7 +72,7 @@ func (r *KubewardenAddon) ValidateUpdate(old runtime.Object) (admission.Warnings
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type.
 func (r *KubewardenAddon) ValidateDelete() (admission.Warnings, error) {
-	kubewardenaddonlog.Info("validate delete", "name", r.Name)
+	kubewardenaddonlog.Info("validate delete", "name", r.GetName())
 
 	// TODO(user): fill in your validation logic upon object deletion.
 	return nil, nil

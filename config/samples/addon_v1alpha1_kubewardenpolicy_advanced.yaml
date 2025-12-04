@@ -1,0 +1,99 @@
+apiVersion: addon.cluster.x-k8s.io/v1alpha1
+kind: KubewardenPolicy
+metadata:
+  labels:
+    app.kubernetes.io/name: cluster-api-addon-provider-kubewarden
+    app.kubernetes.io/managed-by: kustomize
+  name: kubewardenpolicy-psp-capabilities
+spec:
+  # Select clusters where this policy should be deployed
+  clusterSelector:
+    matchLabels:
+      environment: production
+      tier: backend
+  
+  # Type of policy: ClusterAdmissionPolicy (cluster-wide) or AdmissionPolicy (namespace-scoped)
+  policyType: ClusterAdmissionPolicy
+  
+  # Name of the policy in the workload cluster
+  policyName: psp-capabilities
+  
+  # PolicyServer to use (default: "default")
+  policyServer: default
+  
+  # Policy module location
+  module: registry://ghcr.io/kubewarden/policies/pod-privileged:v1.0.8
+  
+  # Rules defining what resources this policy applies to
+  rules:
+    - apiGroups: [""]
+      apiVersions: ["v1"]
+      resources: ["pods"]
+      operations:
+        - CREATE
+        - UPDATE
+  
+  # Whether this policy mutates requests (this policy can mutate)
+  mutating: false
+  
+  # Policy-specific settings
+  settings:
+    allowed_capabilities:
+      - CHOWN
+    required_drop_capabilities:
+      - NET_ADMIN
+  
+  # Failure policy: Fail or Ignore
+  failurePolicy: Fail
+---
+apiVersion: addon.cluster.x-k8s.io/v1alpha1
+kind: KubewardenPolicy
+metadata:
+  labels:
+    app.kubernetes.io/name: cluster-api-addon-provider-kubewarden
+    app.kubernetes.io/managed-by: kustomize
+  name: kubewardenpolicy-namespace-scoped
+spec:
+  # Select clusters where this policy should be deployed
+  clusterSelector:
+    matchLabels:
+      environment: staging
+  
+  # Type of policy: AdmissionPolicy (namespace-scoped)
+  policyType: AdmissionPolicy
+  
+  # Name of the policy in the workload cluster
+  policyName: verify-image-signatures
+  
+  # Target namespace for AdmissionPolicy
+  targetNamespace: production-apps
+  
+  # PolicyServer to use
+  policyServer: default
+  
+  # Policy module location
+  module: registry://ghcr.io/kubewarden/policies/verify-image-signatures:v0.2.1
+  
+  # Rules defining what resources this policy applies to
+  rules:
+    - apiGroups: [""]
+      apiVersions: ["v1"]
+      resources: ["pods"]
+      operations:
+        - CREATE
+  
+  # Whether this policy mutates requests
+  mutating: false
+  
+  # Policy-specific settings for image signature verification
+  settings:
+    signatures:
+      - image: "ghcr.io/my-org/*"
+        pubKeys:
+          - |
+            -----BEGIN PUBLIC KEY-----
+            MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE...
+            -----END PUBLIC KEY-----
+  
+  # Failure policy: Fail or Ignore
+  failurePolicy: Fail
