@@ -8,6 +8,7 @@ rules:
   - addon.cluster.x-k8s.io
   resources:
   - kubewardenaddons
+  - kubewardenpolicies
   verbs:
   - create
   - delete
@@ -20,12 +21,14 @@ rules:
   - addon.cluster.x-k8s.io
   resources:
   - kubewardenaddons/finalizers
+  - kubewardenpolicies/finalizers
   verbs:
   - update
 - apiGroups:
   - addon.cluster.x-k8s.io
   resources:
   - kubewardenaddons/status
+  - kubewardenpolicies/status
   verbs:
   - get
   - patch

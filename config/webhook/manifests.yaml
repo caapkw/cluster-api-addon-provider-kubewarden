@@ -24,6 +24,26 @@ webhooks:
     resources:
     - kubewardenaddons
   sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /mutate-addon-cluster-x-k8s-io-v1alpha1-kubewardenpolicy
+  failurePolicy: Fail
+  name: mkubewardenpolicy.kb.io
+  rules:
+  - apiGroups:
+    - addon.cluster.x-k8s.io
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - kubewardenpolicies
+  sideEffects: None
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
@@ -49,4 +69,24 @@ webhooks:
     - UPDATE
     resources:
     - kubewardenaddons
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /validate-addon-cluster-x-k8s-io-v1alpha1-kubewardenpolicy
+  failurePolicy: Fail
+  name: vkubewardenpolicy.kb.io
+  rules:
+  - apiGroups:
+    - addon.cluster.x-k8s.io
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - kubewardenpolicies
   sideEffects: None
