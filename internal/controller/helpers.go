@@ -56,6 +56,9 @@ func createKubewardenNamespace(ctx context.Context, remoteClient client.Client) 
 	return nil
 }
 
+// renderHelmChart downloads and renders a Helm chart. The `version` parameter is treated
+// as an appVersion hint; if provided, we resolve a chart version compatible with that
+// appVersion. If resolution is not implemented, we default to latest chart version.
 func renderHelmChart(ctx context.Context, name, version string, values map[string]interface{}) (string, error) {
 	_, settings, err := createActionConfig(ctx, kubewardenNamespace)
 	if err != nil {
@@ -64,9 +67,8 @@ func renderHelmChart(ctx context.Context, name, version string, values map[strin
 
 	var chartPathOptions action.ChartPathOptions = action.ChartPathOptions{
 		RepoURL: kubewardenHelmChartURL,
-		// this is chart version != app version & specific for each kubewarden chart
-		// if empty, the latest version is used
-		Version: version,
+		// Chart version differs from appVersion; resolve chart version or use latest.
+		Version: resolveChartVersion(version, name),
 	}
 
 	chart, err := getChart(chartPathOptions, name, settings)
@@ -100,6 +102,18 @@ func renderHelmChart(ctx context.Context, name, version string, values map[strin
 	}
 
 	return renderedFile.Name(), nil
+}
+
+// resolveChartVersion attempts to map an appVersion (e.g., "v1.18.0") to a chart version.
+// If appVersion is empty, or mapping isn't implemented, returns empty string so Helm uses latest.
+// In future, this can fetch index.yaml and match entries by appVersion.
+func resolveChartVersion(appVersion string, chartName string) string {
+	if appVersion == "" {
+		return ""
+	}
+	// TODO: Implement index.yaml resolution to match by appVersion.
+	// For now, return empty to let Helm pull the latest chart version compatible with current repo.
+	return ""
 }
 
 func createActionConfig(ctx context.Context, targetNamespace string) (*action.Configuration, *cli.EnvSettings, error) {

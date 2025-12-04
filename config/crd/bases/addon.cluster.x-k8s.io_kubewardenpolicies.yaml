@@ -1,0 +1,379 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.16.4
+  name: kubewardenpolicies.addon.cluster.x-k8s.io
+spec:
+  group: addon.cluster.x-k8s.io
+  names:
+    kind: KubewardenPolicy
+    listKind: KubewardenPolicyList
+    plural: kubewardenpolicies
+    singular: kubewardenpolicy
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.policyType
+      name: Policy Type
+      type: string
+    - jsonPath: .spec.module
+      name: Module
+      type: string
+    - jsonPath: .status.ready
+      name: Ready
+      type: boolean
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: KubewardenPolicy is the Schema for the kubewardenpolicies API.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: KubewardenPolicySpec defines the desired state of KubewardenPolicy.
+            properties:
+              clusterSelector:
+                description: |-
+                  ClusterSelector selects Clusters in the same namespace with a label that matches the specified label selector.
+                  The policy will be deployed to all selected Clusters.
+                properties:
+                  matchExpressions:
+                    description: matchExpressions is a list of label selector requirements.
+                      The requirements are ANDed.
+                    items:
+                      description: |-
+                        A label selector requirement is a selector that contains values, a key, and an operator that
+                        relates the key and values.
+                      properties:
+                        key:
+                          description: key is the label key that the selector applies
+                            to.
+                          type: string
+                        operator:
+                          description: |-
+                            operator represents a key's relationship to a set of values.
+                            Valid operators are In, NotIn, Exists and DoesNotExist.
+                          type: string
+                        values:
+                          description: |-
+                            values is an array of string values. If the operator is In or NotIn,
+                            the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                            the values array must be empty. This array is replaced during a strategic
+                            merge patch.
+                          items:
+                            type: string
+                          type: array
+                          x-kubernetes-list-type: atomic
+                      required:
+                      - key
+                      - operator
+                      type: object
+                    type: array
+                    x-kubernetes-list-type: atomic
+                  matchLabels:
+                    additionalProperties:
+                      type: string
+                    description: |-
+                      matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                      map is equivalent to an element of matchExpressions, whose key field is "key", the
+                      operator is "In", and the values array contains only "value". The requirements are ANDed.
+                    type: object
+                type: object
+                x-kubernetes-map-type: atomic
+              failurePolicy:
+                default: Fail
+                description: |-
+                  FailurePolicy defines how to handle failures from the policy.
+                  Valid values are "Ignore" and "Fail".
+                enum:
+                - Ignore
+                - Fail
+                type: string
+              matchConditions:
+                description: |-
+                  MatchConditions is a list of conditions that must be met for the policy to be evaluated.
+                  This is an optional advanced feature.
+                items:
+                  description: MatchCondition represents a condition that must be
+                    met for the policy to be evaluated.
+                  properties:
+                    expression:
+                      description: Expression is a CEL expression that must evaluate
+                        to true for the policy to be evaluated.
+                      type: string
+                    name:
+                      description: Name is the identifier for this match condition.
+                      type: string
+                  required:
+                  - expression
+                  - name
+                  type: object
+                type: array
+              module:
+                description: |-
+                  Module is the location of the Kubewarden policy.
+                  Examples:
+                    - registry://ghcr.io/kubewarden/policies/pod-privileged:v1.0.8
+                    - https://github.com/kubewarden/pod-privileged-policy/releases/download/v0.2.2/policy.wasm
+                type: string
+              mutating:
+                default: false
+                description: Mutating indicates whether this policy can mutate incoming
+                  requests.
+                type: boolean
+              policyName:
+                description: |-
+                  PolicyName is the name of the policy to create in the workload cluster.
+                  If not specified, the name of the KubewardenPolicy resource will be used.
+                type: string
+              policyServer:
+                default: default
+                description: |-
+                  PolicyServer identifies the PolicyServer that will serve this policy.
+                  If not specified, the "default" PolicyServer will be used.
+                type: string
+              policyType:
+                default: ClusterAdmissionPolicy
+                description: |-
+                  PolicyType specifies the type of policy to create.
+                  Valid values are "ClusterAdmissionPolicy" (cluster-wide) and "AdmissionPolicy" (namespace-scoped).
+                enum:
+                - ClusterAdmissionPolicy
+                - AdmissionPolicy
+                type: string
+              rules:
+                description: Rules define which Kubernetes resources and operations
+                  this policy applies to.
+                items:
+                  description: PolicyRule defines the scope of a policy.
+                  properties:
+                    apiGroups:
+                      description: |-
+                        APIGroups is a list of API groups this policy applies to.
+                        Example: ["", "apps"]
+                      items:
+                        type: string
+                      type: array
+                    apiVersions:
+                      description: |-
+                        APIVersions is a list of API versions this policy applies to.
+                        Example: ["v1"]
+                      items:
+                        type: string
+                      type: array
+                    operations:
+                      description: |-
+                        Operations is a list of operations this policy applies to.
+                        Valid values are CREATE, UPDATE, DELETE, CONNECT.
+                      items:
+                        type: string
+                      minItems: 1
+                      type: array
+                    resources:
+                      description: |-
+                        Resources is a list of resource types this policy applies to.
+                        Example: ["pods", "deployments"]
+                      items:
+                        type: string
+                      type: array
+                    scope:
+                      description: |-
+                        Scope specifies the scope of the rule.
+                        Valid values are "*", "Cluster", "Namespaced".
+                      enum:
+                      - '*'
+                      - Cluster
+                      - Namespaced
+                      type: string
+                  required:
+                  - apiVersions
+                  - operations
+                  - resources
+                  type: object
+                type: array
+              settings:
+                description: Settings is a free-form object that contains the policy
+                  configuration values.
+                type: object
+                x-kubernetes-preserve-unknown-fields: true
+              targetNamespace:
+                description: |-
+                  TargetNamespace is the namespace where the policy will be created in the workload cluster.
+                  Only applicable when PolicyType is "AdmissionPolicy". For ClusterAdmissionPolicy, this field is ignored.
+                type: string
+            required:
+            - clusterSelector
+            - module
+            - rules
+            type: object
+          status:
+            description: KubewardenPolicyStatus defines the observed state of KubewardenPolicy.
+            properties:
+              conditions:
+                description: Conditions defines current state of the KubewardenPolicy.
+                items:
+                  description: Condition defines an observation of a Cluster API resource
+                    operational state.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        Last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed. If that is not known, then using the time when
+                        the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        A human readable message indicating details about the transition.
+                        This field may be empty.
+                      type: string
+                    reason:
+                      description: |-
+                        The reason for the condition's last transition in CamelCase.
+                        The specific API may choose whether or not this field is considered a guaranteed API.
+                        This field may not be empty.
+                      type: string
+                    severity:
+                      description: |-
+                        Severity provides an explicit classification of Reason code, so the users or machines can immediately
+                        understand the current situation and act accordingly.
+                        The Severity field MUST be set only when Status=False.
+                      type: string
+                    status:
+                      description: Status of the condition, one of True, False, Unknown.
+                      type: string
+                    type:
+                      description: |-
+                        Type of condition in CamelCase or in foo.example.com/CamelCase.
+                        Many .condition.type values are consistent across resources like Available, but because arbitrary conditions
+                        can be useful (see .node.status.conditions), the ability to deconflict is important.
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - status
+                  - type
+                  type: object
+                type: array
+              deployedPolicies:
+                description: DeployedPolicies tracks the policies deployed to each
+                  cluster.
+                items:
+                  description: DeployedPolicyStatus represents the status of a policy
+                    deployed to a specific cluster.
+                  properties:
+                    active:
+                      description: Active indicates whether the policy is active in
+                        the workload cluster.
+                      type: boolean
+                    clusterName:
+                      description: ClusterName is the name of the cluster where the
+                        policy is deployed.
+                      type: string
+                    clusterNamespace:
+                      description: ClusterNamespace is the namespace of the cluster
+                        resource.
+                      type: string
+                    lastTransitionTime:
+                      description: LastTransitionTime is the last time the status
+                        transitioned.
+                      format: date-time
+                      type: string
+                    message:
+                      description: Message provides additional information about the
+                        policy status.
+                      type: string
+                    policyName:
+                      description: PolicyName is the name of the policy in the workload
+                        cluster.
+                      type: string
+                    policyType:
+                      description: PolicyType is the type of policy (ClusterAdmissionPolicy
+                        or AdmissionPolicy).
+                      type: string
+                  required:
+                  - active
+                  - clusterName
+                  - clusterNamespace
+                  - policyName
+                  - policyType
+                  type: object
+                type: array
+              matchingClusters:
+                description: MatchingClusters is the list of references to Clusters
+                  selected by the ClusterSelector.
+                items:
+                  description: ObjectReference contains enough information to let
+                    you inspect or modify the referred object.
+                  properties:
+                    apiVersion:
+                      description: API version of the referent.
+                      type: string
+                    fieldPath:
+                      description: |-
+                        If referring to a piece of an object instead of an entire object, this string
+                        should contain a valid JSON/Go field access statement, such as desiredState.manifest.containers[2].
+                        For example, if the object reference is to a container within a pod, this would take on a value like:
+                        "spec.containers{name}" (where "name" refers to the name of the container that triggered
+                        the event) or if no container name is specified "spec.containers[2]" (container with
+                        index 2 in this pod). This syntax is chosen only to have some well-defined way of
+                        referencing a part of an object.
+                      type: string
+                    kind:
+                      description: |-
+                        Kind of the referent.
+                        More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+                      type: string
+                    name:
+                      description: |-
+                        Name of the referent.
+                        More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                      type: string
+                    namespace:
+                      description: |-
+                        Namespace of the referent.
+                        More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
+                      type: string
+                    resourceVersion:
+                      description: |-
+                        Specific resourceVersion to which this reference is made, if any.
+                        More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
+                      type: string
+                    uid:
+                      description: |-
+                        UID of the referent.
+                        More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids
+                      type: string
+                  type: object
+                  x-kubernetes-map-type: atomic
+                type: array
+              ready:
+                description: Ready indicates whether the policy is successfully deployed.
+                type: boolean
+            required:
+            - ready
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

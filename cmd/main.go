@@ -135,8 +135,21 @@ func main() {
 		os.Exit(1)
 	}
 
+	if err = (&controller.KubewardenPolicyReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(ctx, mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "KubewardenPolicy")
+		os.Exit(1)
+	}
+
 	if err = (&addonv1alpha1.KubewardenAddon{}).SetupWebhookWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create webhook", "webhook", "KubewardenAddon")
+		os.Exit(1)
+	}
+
+	if err = (&addonv1alpha1.KubewardenPolicy{}).SetupWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "KubewardenPolicy")
 		os.Exit(1)
 	}
 
