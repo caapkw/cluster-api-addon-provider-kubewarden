@@ -25,6 +25,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	labels "k8s.io/apimachinery/pkg/labels"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -109,21 +110,22 @@ func (r *KubewardenAddonReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 func (r *KubewardenAddonReconciler) reconcileNormal(ctx context.Context, addon *addonv1alpha1.KubewardenAddon) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
 
-	clusters := []clusterv1.Cluster{}
-	var err error
-	if deployToAll {
-		clusters, err = r.getAllCapiClusters(ctx, addon.Namespace)
-		if err != nil {
-			return ctrl.Result{}, fmt.Errorf("getting capi clusters: %w", err)
-		}
-	} else {
-		// This is just a placeholder for now, should be the only way to deploy kubewarden in subsequent versions
-		// `deployToAll` is just a temporary configuration to have it running for now
-		// we can set a specific value of KubewardenAddon.Sepc.TargetCluster that means all clusters
-		// but it should be the only source of truth
-		// clusters = addon.Spec.TargetClusters
-		log.Info("Deploying to specific clusters: not supported yet -> won't deploy to any clusters")
+	// Get all clusters in the addon's namespace
+	allClusters, err := r.getAllCapiClusters(ctx, addon.Namespace)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("getting capi clusters: %w", err)
 	}
+
+	// Filter clusters using ClusterSelector
+	selectedClusters, err := r.selectClusters(allClusters, addon.Spec.ClusterSelector)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("selecting clusters: %w", err)
+	}
+
+	// Update status with matching clusters
+	addon.SetMatchingClusters(selectedClusters)
+
+	clusters := selectedClusters
 
 	for _, cluster := range clusters {
 		log = log.WithValues("cluster", cluster.Name)
@@ -200,6 +202,20 @@ func (r *KubewardenAddonReconciler) reconcileNormal(ctx context.Context, addon *
 		}
 	}
 
+	// Update addon status: all selected clusters are now ready
+	addonCopy := addon.DeepCopy()
+	addon.Status.Ready = len(selectedClusters) > 0 && len(clusters) == len(selectedClusters)
+	if addon.Status.Ready {
+		log.Info("All selected clusters have Kubewarden installed", "ready", addon.Status.Ready)
+	}
+
+	// Patch addon status
+	statusPath := client.MergeFrom(addonCopy)
+	if err := r.Client.Status().Patch(ctx, addon, statusPath); err != nil {
+		log.Error(err, "failed to update addon status")
+		// Don't return error here as the main functionality succeeded
+	}
+
 	return ctrl.Result{}, nil
 }
 
@@ -236,6 +252,23 @@ func (r *KubewardenAddonReconciler) clusterToKubewardenAddon(ctx context.Context
 
 		return requests
 	}
+}
+
+func (r *KubewardenAddonReconciler) selectClusters(clusters []clusterv1.Cluster, selector metav1.LabelSelector) ([]clusterv1.Cluster, error) {
+	// Convert metav1.LabelSelector to labels.Selector
+	labelSelector, err := metav1.LabelSelectorAsSelector(&selector)
+	if err != nil {
+		return nil, fmt.Errorf("converting label selector: %w", err)
+	}
+
+	var selectedClusters []clusterv1.Cluster
+	for _, cluster := range clusters {
+		if labelSelector.Matches(labels.Set(cluster.Labels)) {
+			selectedClusters = append(selectedClusters, cluster)
+		}
+	}
+
+	return selectedClusters, nil
 }
 
 func (r *KubewardenAddonReconciler) getAllCapiClusters(ctx context.Context, ns string) ([]clusterv1.Cluster, error) {
