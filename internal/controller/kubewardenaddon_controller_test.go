@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	policiesv1 "github.com/kubewarden/kubewarden-controller/api/policies/v1"
 	. "github.com/onsi/ginkgo/v2"
@@ -88,16 +89,31 @@ var _ = Describe("KubewardenAddon Controller", func() {
 		AfterEach(func() {
 			resource := &addonv1alpha1.KubewardenAddon{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
-			Expect(err).NotTo(HaveOccurred())
-
-			resourcesToCleanup := []client.Object{
-				resource,
-				capiCluster,
-			}
-
-			for _, resource := range resourcesToCleanup {
+			if err == nil {
 				By(fmt.Sprintf("Cleanup the object %s", resource.GetName()))
 				Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+			}
+
+			// Clean up all clusters in default namespace
+			clusterList := &clusterv1.ClusterList{}
+			err = k8sClient.List(ctx, clusterList, client.InNamespace("default"))
+			if err == nil {
+				for _, cluster := range clusterList.Items {
+					By(fmt.Sprintf("Cleanup cluster %s", cluster.GetName()))
+					Expect(k8sClient.Delete(ctx, &cluster)).To(Succeed())
+				}
+			}
+
+			// Clean up kubeconfig secrets
+			secretList := &corev1.SecretList{}
+			err = k8sClient.List(ctx, secretList, client.InNamespace("default"))
+			if err == nil {
+				for _, secret := range secretList.Items {
+					if strings.Contains(secret.GetName(), "kubeconfig") {
+						By(fmt.Sprintf("Cleanup secret %s", secret.GetName()))
+						Expect(k8sClient.Delete(ctx, &secret)).To(Succeed())
+					}
+				}
 			}
 		})
 
@@ -162,6 +178,164 @@ var _ = Describe("KubewardenAddon Controller", func() {
 				_, ok := annotations[KubewardenInstalledAnnotation]
 				g.Expect(ok).To(BeTrue())
 			}).Should(Succeed())
+		})
+
+		It("should select clusters based on label selector", func() {
+			By("Creating multiple clusters with different labels")
+			cluster1 := &clusterv1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "cluster-prod",
+					Namespace: "default",
+					Labels: map[string]string{
+						"environment": "production",
+						"tier":        "backend",
+					},
+				},
+			}
+			cluster2 := &clusterv1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "cluster-dev",
+					Namespace: "default",
+					Labels: map[string]string{
+						"environment": "development",
+						"tier":        "frontend",
+					},
+				},
+			}
+			cluster3 := &clusterv1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "cluster-staging",
+					Namespace: "default",
+					Labels: map[string]string{
+						"environment": "staging",
+					},
+				},
+			}
+
+			Expect(k8sClient.Create(ctx, cluster1)).To(Succeed())
+			Expect(k8sClient.Create(ctx, cluster2)).To(Succeed())
+			Expect(k8sClient.Create(ctx, cluster3)).To(Succeed())
+
+			controllerReconciler := &KubewardenAddonReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+			}
+
+			By("Testing matchLabels selector")
+			selector := metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"environment": "production",
+				},
+			}
+			selected, err := controllerReconciler.selectClusters([]clusterv1.Cluster{*cluster1, *cluster2, *cluster3}, selector)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(selected).To(HaveLen(1))
+			Expect(selected[0].Name).To(Equal("cluster-prod"))
+
+			By("Testing matchExpressions selector with In operator")
+			selector = metav1.LabelSelector{
+				MatchExpressions: []metav1.LabelSelectorRequirement{
+					{
+						Key:      "environment",
+						Operator: metav1.LabelSelectorOpIn,
+						Values:   []string{"production", "staging"},
+					},
+				},
+			}
+			selected, err = controllerReconciler.selectClusters([]clusterv1.Cluster{*cluster1, *cluster2, *cluster3}, selector)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(selected).To(HaveLen(2))
+			Expect(selected[0].Name).To(Equal("cluster-prod"))
+			Expect(selected[1].Name).To(Equal("cluster-staging"))
+
+			By("Testing matchExpressions selector with NotIn operator")
+			selector = metav1.LabelSelector{
+				MatchExpressions: []metav1.LabelSelectorRequirement{
+					{
+						Key:      "tier",
+						Operator: metav1.LabelSelectorOpNotIn,
+						Values:   []string{"frontend"},
+					},
+				},
+			}
+			selected, err = controllerReconciler.selectClusters([]clusterv1.Cluster{*cluster1, *cluster2, *cluster3}, selector)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(selected).To(HaveLen(2))
+
+			By("Testing selector that matches no clusters")
+			selector = metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"environment": "nonexistent",
+				},
+			}
+			selected, err = controllerReconciler.selectClusters([]clusterv1.Cluster{*cluster1, *cluster2, *cluster3}, selector)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(selected).To(HaveLen(0))
+		})
+
+		It("should update Status.MatchingClusters with selected clusters", func() {
+			By("Creating test clusters with matching labels")
+			cluster1 := &clusterv1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-cluster-1",
+					Namespace: "default",
+					Labels: map[string]string{
+						"environment": "test",
+					},
+				},
+			}
+			cluster2 := &clusterv1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-cluster-2",
+					Namespace: "default",
+					Labels: map[string]string{
+						"environment": "test",
+					},
+				},
+			}
+
+			Expect(k8sClient.Create(ctx, cluster1)).To(Succeed())
+			Expect(k8sClient.Create(ctx, cluster2)).To(Succeed())
+
+			By("Creating KubewardenAddon with matching label selector")
+			addon := &addonv1alpha1.KubewardenAddon{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "status-test",
+					Namespace: "default",
+				},
+				Spec: addonv1alpha1.KubewardenAddonSpec{
+					ClusterSelector: metav1.LabelSelector{
+						MatchLabels: map[string]string{
+							"environment": "test",
+						},
+					},
+					PolicyServerConfig: addonv1alpha1.PolicyServerConfig{
+						Replicas: 1,
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, addon)).To(Succeed())
+
+			controllerReconciler := &KubewardenAddonReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+			}
+
+			By("Selecting clusters and updating status")
+			allClusters, err := controllerReconciler.getAllCapiClusters(ctx, "default")
+			Expect(err).NotTo(HaveOccurred())
+
+			selected, err := controllerReconciler.selectClusters(allClusters, addon.Spec.ClusterSelector)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(selected).To(HaveLen(2))
+
+			addon.SetMatchingClusters(selected)
+
+			By("Verifying Status.MatchingClusters is populated")
+			Expect(addon.Status.MatchingClusters).To(HaveLen(2))
+			clusterNames := []string{addon.Status.MatchingClusters[0].Name, addon.Status.MatchingClusters[1].Name}
+			Expect(clusterNames).To(ContainElement("test-cluster-1"))
+			Expect(clusterNames).To(ContainElement("test-cluster-2"))
 		})
 	})
 })

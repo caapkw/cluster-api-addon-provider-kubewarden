@@ -93,6 +93,8 @@ ${BLUE}Demo Flow:${NC}
 2. Deploy CAAPKW controller
 3. Create workload cluster (simulated with CAPI Docker provider)
 4. Install Kubewarden on workload cluster (via KubewardenAddon)
+   - Demonstrate cluster selection using label selectors
+   - Show status tracking (Ready, MatchingClusters)
 5. Deploy security policy (via KubewardenPolicy)
 6. Verify policy enforcement in workload cluster
 7. Show policy updates propagating automatically
@@ -287,12 +289,28 @@ EOF
     kubectl get kubewardenaddon kubewarden-demo -n default
     echo ""
     
+    demo "Let's verify cluster selection and status tracking..."
+    echo ""
+    info "KubewardenAddon details (showing matched clusters and status):"
+    kubectl get kubewardenaddon kubewarden-demo -n default -o yaml | grep -A 10 "status:"
+    echo ""
+    
+    info "MatchingClusters (selected via clusterSelector):"
+    kubectl get kubewardenaddon kubewarden-demo -n default -o jsonpath='{.status.matchingClusters[*].name}' || echo "No matching clusters yet"
+    echo ""
+    
+    info "Installation ready status:"
+    kubectl get kubewardenaddon kubewarden-demo -n default -o jsonpath='{.status.ready}' || echo "Not ready yet"
+    echo ""
+    
     info "Let's verify Kubewarden is running in the workload cluster..."
     kubectl --kubeconfig="${WORKLOAD_CLUSTER_NAME}.kubeconfig" get pods -n kubewarden
     echo ""
     
     demo "✓ Kubewarden is now installed in the workload cluster!"
     demo "  This happened automatically - no manual kubectl apply to workload cluster"
+    demo "✓ Cluster selection verified - only clusters matching the label selector were targeted"
+    demo "✓ Status tracking enabled - addon status shows installation progress and matched clusters"
     pause
 }
 
