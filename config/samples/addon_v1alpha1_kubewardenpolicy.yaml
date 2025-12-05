@@ -1,0 +1,43 @@
+apiVersion: addon.cluster.x-k8s.io/v1alpha1
+kind: KubewardenPolicy
+metadata:
+  labels:
+    app.kubernetes.io/name: cluster-api-addon-provider-kubewarden
+    app.kubernetes.io/managed-by: kustomize
+  name: kubewardenpolicy-privileged-pods
+spec:
+  # Select clusters where this policy should be deployed
+  clusterSelector:
+    matchLabels:
+      environment: production
+  
+  # Type of policy: ClusterAdmissionPolicy (cluster-wide) or AdmissionPolicy (namespace-scoped)
+  policyType: ClusterAdmissionPolicy
+  
+  # Name of the policy in the workload cluster
+  policyName: privileged-pods
+  
+  # PolicyServer to use (default: "default")
+  policyServer: default
+  
+  # Policy module location
+  module: registry://ghcr.io/kubewarden/policies/pod-privileged:v1.0.8
+  
+  # Rules defining what resources this policy applies to
+  rules:
+    - apiGroups: [""]
+      apiVersions: ["v1"]
+      resources: ["pods"]
+      operations:
+        - CREATE
+        - UPDATE
+  
+  # Whether this policy mutates requests
+  mutating: false
+  
+  # Settings for the policy (policy-specific configuration)
+  # For pod-privileged policy, an empty object means "reject all privileged pods"
+  settings: {}
+  
+  # Failure policy: Fail or Ignore
+  failurePolicy: Fail

@@ -157,6 +157,17 @@ build: manifests generate fmt vet ## Build manager binary.
 run: manifests generate fmt vet ## Run a controller from your host.
 	go run ./cmd/main.go
 
+.PHONY: dev-reset-and-deploy
+dev-reset-and-deploy: ## Complete reset and redeploy: cleans everything, sets up fresh env with built image, and runs demo
+	@echo "=== Cleaning up local dev environment ==="
+	./scripts/local-dev-cleanup.sh || true
+	@echo ""
+	@echo "=== Setting up new local dev environment (includes building and loading image) ==="
+	./scripts/local-dev-setup.sh
+	@echo ""
+	@echo "=== Running demo ==="
+	./scripts/demo.sh
+
 # If you wish to build the manager image targeting other platforms you can use the --platform flag.
 # (i.e. docker build --platform linux/arm64). However, you must enable docker buildKit for it.
 # More info: https://docs.docker.com/develop/develop-images/build_enhancements/
@@ -173,6 +184,10 @@ docker-pull-prerequisites:
 
 .PHONY: docker-build
 docker-build: buildx-machine docker-pull-prerequisites ## Build docker image for a specific architecture
+	# Remove old image if exists to ensure completely fresh build
+	docker rmi $(CONTROLLER_IMG):$(TAG) 2>/dev/null || true
+	# Clean buildx cache to ensure latest code is included
+	docker buildx prune -af --builder $(MACHINE)
 	# buildx does not support using local registry for multi-architecture images
 	DOCKER_BUILDKIT=1 BUILDX_BUILDER=$(MACHINE) docker buildx build \
 			--platform $(ARCH) \
@@ -185,6 +200,10 @@ docker-build: buildx-machine docker-pull-prerequisites ## Build docker image for
 
 .PHONY: docker-build-and-push
 docker-build-and-push: buildx-machine docker-pull-prerequisites ## Run docker-build-and-push targets for all architectures
+	# Remove old image if exists to ensure completely fresh build
+	docker rmi $(CONTROLLER_IMG):$(TAG) 2>/dev/null || true
+	# Clean buildx cache to ensure latest code is included
+	docker buildx prune -af --builder $(MACHINE)
 	DOCKER_BUILDKIT=1 BUILDX_BUILDER=$(MACHINE) docker buildx build \
 			--platform $(TARGET_PLATFORMS) \
 			--push \

@@ -7,3 +7,5 @@ spec:
   ports:
     - port: 443
       targetPort: webhook-server
+  selector:
+    control-plane: controller-manager

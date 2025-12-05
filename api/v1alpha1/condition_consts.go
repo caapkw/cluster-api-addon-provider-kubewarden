@@ -43,3 +43,21 @@ const (
 	// or deletion is complete.
 	KubewardenAddonsReadyCondition clusterv1.ConditionType = "KubewardenAddonReady"
 )
+
+// KubewardenPolicy Conditions and Reasons.
+const (
+	// KubewardenPolicyReadyCondition indicates that the KubewardenPolicy is ready and deployed to all matching clusters.
+	KubewardenPolicyReadyCondition clusterv1.ConditionType = "KubewardenPolicyReady"
+
+	// KubewardenPolicyDeploymentFailedReason indicates that the KubewardenPolicy controller failed to deploy a policy.
+	KubewardenPolicyDeploymentFailedReason = "KubewardenPolicyDeploymentFailed"
+
+	// KubewardenPolicyDeletionFailedReason indicates that the KubewardenPolicy controller failed to delete a policy.
+	KubewardenPolicyDeletionFailedReason = "KubewardenPolicyDeletionFailed"
+
+	// KubewardenNotInstalledReason indicates that Kubewarden is not installed on the target cluster.
+	KubewardenNotInstalledReason = "KubewardenNotInstalled"
+
+	// PolicyNotActiveReason indicates that the policy is deployed but not yet active.
+	PolicyNotActiveReason = "PolicyNotActive"
+)

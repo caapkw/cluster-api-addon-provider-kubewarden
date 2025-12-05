@@ -3,10 +3,12 @@
 # It should be run by config/default
 resources:
 - bases/addon.cluster.x-k8s.io_kubewardenaddons.yaml
+- bases/addon.cluster.x-k8s.io_kubewardenpolicies.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:
 - path: patches/webhook_in_kubewardenaddons.yaml
+- path: patches/webhook_in_kubewardenpolicies.yaml
 # [WEBHOOK] To enable webhook, uncomment all the sections with [WEBHOOK] prefix.
 # patches here are for enabling the conversion webhook for each CRD
 # +kubebuilder:scaffold:crdkustomizewebhookpatch

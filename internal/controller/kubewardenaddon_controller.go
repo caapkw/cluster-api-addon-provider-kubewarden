@@ -23,7 +23,10 @@ import (
 	"os"
 	"path/filepath"
 
+	appsv1 "k8s.io/api/apps/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/types"
@@ -149,7 +152,12 @@ func (r *KubewardenAddonReconciler) reconcileNormal(ctx context.Context, addon *
 
 		// create kubewarden crds
 		log.Info("Applying Kubewarden CRDs", "cluster", cluster.Name)
-		err = r.installKubewardenCRDs(ctx, kubewardenVersion, remoteClient) // kubewardenVersion is a placeholder until we can use the value from KubewardenAddon.Spec.Version
+		// Use appVersion from spec if provided; otherwise default.
+		appVersion := kubewardenVersion
+		if addon.Spec.Version != "" {
+			appVersion = addon.Spec.Version
+		}
+		err = r.installKubewardenCRDs(ctx, appVersion, remoteClient)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("creating kubewarden CRDs: %w", err)
 		}
@@ -164,6 +172,12 @@ func (r *KubewardenAddonReconciler) reconcileNormal(ctx context.Context, addon *
 		log.Info("Installing default 'PolicyServer'", "cluster", cluster.Name)
 		if err := r.installKubewardenDefaults(ctx, remoteClient, addon); err != nil {
 			return ctrl.Result{}, fmt.Errorf("installing kubewarden defaults: %w", err)
+		}
+
+		// Patch PolicyServer and deployments to tolerate control-plane taint
+		log.Info("Applying control-plane tolerations", "cluster", cluster.Name)
+		if err := r.applyControlPlaneTolerations(ctx, remoteClient); err != nil {
+			return ctrl.Result{}, fmt.Errorf("applying control-plane tolerations: %w", err)
 		}
 
 		// annotate cluster so we don't try to deploy kubewarden again
@@ -273,8 +287,20 @@ func (r *KubewardenAddonReconciler) installKubewardenCRDs(ctx context.Context, v
 }
 
 func (r *KubewardenAddonReconciler) installKubewardenController(ctx context.Context, remoteClient client.Client, addon *addonv1alpha1.KubewardenAddon) error {
+	// Add control-plane toleration for single-node clusters (CAPD, kind, etc.)
+	values := map[string]interface{}{
+		"tolerations": []map[string]interface{}{
+			{
+				"key":      "node-role.kubernetes.io/control-plane",
+				"operator": "Exists",
+				"effect":   "NoSchedule",
+			},
+		},
+	}
+
 	// render kubewarden-controller helm chart and apply it to the cluster
-	renderedPath, err := renderHelmChart(ctx, "kubewarden-controller", addon.Spec.Version, nil)
+	// Treat addon.Spec.Version as appVersion; chart version is resolved internally.
+	renderedPath, err := renderHelmChart(ctx, "kubewarden-controller", addon.Spec.Version, values)
 	if err != nil {
 		return fmt.Errorf("render kubewarden-controller helm chart: %w", err)
 	}
@@ -286,13 +312,133 @@ func (r *KubewardenAddonReconciler) installKubewardenController(ctx context.Cont
 }
 
 func (r *KubewardenAddonReconciler) installKubewardenDefaults(ctx context.Context, remoteClient client.Client, addon *addonv1alpha1.KubewardenAddon) error {
+	// Add control-plane toleration for single-node clusters (CAPD, kind, etc.)
+	values := map[string]interface{}{
+		"policyServer": map[string]interface{}{
+			"tolerations": []map[string]interface{}{
+				{
+					"key":      "node-role.kubernetes.io/control-plane",
+					"operator": "Exists",
+					"effect":   "NoSchedule",
+				},
+			},
+		},
+	}
+
 	// render kubewarden-defaults helm chart and apply it to the cluster
-	renderedPath, err := renderHelmChart(ctx, "kubewarden-defaults", addon.Spec.Version, nil)
+	renderedPath, err := renderHelmChart(ctx, "kubewarden-defaults", addon.Spec.Version, values)
 	if err != nil {
 		return fmt.Errorf("render kubewarden-defaults helm chart: %w", err)
 	}
 	if err := r.applyManifest(ctx, remoteClient, renderedPath); err != nil {
 		return fmt.Errorf("apply kubewarden-defaults manifest: %w", err)
+	}
+
+	return nil
+}
+
+// applyControlPlaneTolerations patches Kubewarden deployments and PolicyServer
+// to tolerate control-plane taint for single-node clusters
+func (r *KubewardenAddonReconciler) applyControlPlaneTolerations(ctx context.Context, remoteClient client.Client) error {
+	log := log.FromContext(ctx)
+
+	// Patch kubewarden-controller deployment with proper JSON
+	patchController := `{
+  "spec": {
+    "template": {
+      "spec": {
+        "tolerations": [
+          {
+            "key": "node-role.kubernetes.io/control-plane",
+            "operator": "Exists",
+            "effect": "NoSchedule"
+          }
+        ]
+      }
+    }
+  }
+}`
+
+	log.Info("Patching kubewarden-controller deployment")
+	if err := remoteClient.Patch(ctx,
+		&appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      kubewardenHelmReleaseName + "-kubewarden-controller",
+				Namespace: kubewardenNamespace,
+			},
+		},
+		client.RawPatch(types.StrategicMergePatchType, []byte(patchController)),
+	); err != nil {
+		return fmt.Errorf("patch kubewarden-controller deployment: %w", err)
+	}
+
+	// Patch PolicyServer CRD with proper JSON
+	patchPolicyServer := `{
+  "spec": {
+    "tolerations": [
+      {
+        "key": "node-role.kubernetes.io/control-plane",
+        "operator": "Exists",
+        "effect": "NoSchedule"
+      }
+    ]
+  }
+}`
+
+	log.Info("Patching PolicyServer default")
+	if err := remoteClient.Patch(ctx,
+		&unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "policies.kubewarden.io/v1",
+				"kind":       "PolicyServer",
+				"metadata": map[string]interface{}{
+					"name":      kubewardenHelmDefaultPolicyServerName,
+					"namespace": kubewardenNamespace,
+				},
+			},
+		},
+		client.RawPatch(types.MergePatchType, []byte(patchPolicyServer)),
+	); err != nil {
+		return fmt.Errorf("patch PolicyServer: %w", err)
+	}
+
+	// Patch audit-scanner CronJob
+	patchAuditScanner := `{
+  "spec": {
+    "jobTemplate": {
+      "spec": {
+        "template": {
+          "spec": {
+            "tolerations": [
+              {
+                "key": "node-role.kubernetes.io/control-plane",
+                "operator": "Exists",
+                "effect": "NoSchedule"
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}`
+
+	log.Info("Patching audit-scanner CronJob")
+	if err := remoteClient.Patch(ctx,
+		&unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "batch/v1",
+				"kind":       "CronJob",
+				"metadata": map[string]interface{}{
+					"name":      "audit-scanner",
+					"namespace": kubewardenNamespace,
+				},
+			},
+		},
+		client.RawPatch(types.StrategicMergePatchType, []byte(patchAuditScanner)),
+	); err != nil {
+		// audit-scanner is optional, don't fail if it doesn't exist
+		log.Info("Could not patch audit-scanner CronJob (might not exist)", "error", err)
 	}
 
 	return nil
